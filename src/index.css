@@ -1,0 +1,80 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap");
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 210 33% 98%;
+  --foreground: 222 47% 12%;
+  --background-secondary: 210 30% 96%;
+  --background-alt: 204 30% 93%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 12%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 12%;
+  --primary: 161 72% 38%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 23% 95%;
+  --secondary-foreground: 221 39% 18%;
+  --muted: 210 16% 88%;
+  --muted-foreground: 221 15% 36%;
+  --accent: 258 90% 66%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 74% 56%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 215 25% 86%;
+  --input: 214 32% 91%;
+  --ring: 161 72% 38%;
+  --radius: 1rem;
+}
+
+.dark {
+  --background: 226 40% 8%;
+  --foreground: 210 40% 96%;
+  --background-secondary: 226 35% 12%;
+  --background-alt: 200 45% 18%;
+  --card: 226 35% 16%;
+  --card-foreground: 210 40% 96%;
+  --popover: 226 35% 16%;
+  --popover-foreground: 210 40% 96%;
+  --primary: 164 88% 53%;
+  --primary-foreground: 222 40% 10%;
+  --secondary: 230 30% 20%;
+  --secondary-foreground: 210 40% 96%;
+  --muted: 225 20% 26%;
+  --muted-foreground: 220 15% 74%;
+  --accent: 255 75% 62%;
+  --accent-foreground: 210 40% 96%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 0 85.7% 97.3%;
+  --border: 220 20% 28%;
+  --input: 220 20% 28%;
+  --ring: 164 88% 53%;
+}
+
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(140% 120% at 20% 20%, rgba(52, 211, 153, 0.14), transparent),
+    radial-gradient(120% 120% at 80% 0%, rgba(99, 102, 241, 0.1), transparent),
+    linear-gradient(180deg, #f7f9fb 0%, #eef2f7 36%, #e7edf5 100%);
+  background-attachment: fixed;
+  color: hsl(var(--foreground));
+  font-family: "Space Grotesk", "Segoe UI", system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: rgba(52, 211, 153, 0.2);
+  color: hsl(var(--foreground));
+}
+
+/* Light theme lift for reused glassmorphism utilities */
+.bg-white\/5 { background-color: rgba(255, 255, 255, 0.82) !important; }
+.bg-white\/10 { background-color: rgba(255, 255, 255, 0.92) !important; }
+.bg-white\/15 { background-color: rgba(255, 255, 255, 0.95) !important; }
+.border-white\/10 { --tw-border-opacity: 1; border-color: rgba(226, 232, 240, 0.95) !important; }
+.border-white\/5 { --tw-border-opacity: 1; border-color: rgba(234, 236, 242, 0.9) !important; }
+.ring-white\/10 { --tw-ring-opacity: 1; --tw-ring-color: rgba(226, 232, 240, 0.9) !important; }
+
+/* Tailwind v3 uses config-based theme; tokens mapped in tailwind.config.js */
