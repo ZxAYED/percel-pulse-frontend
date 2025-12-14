@@ -1,8 +1,8 @@
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { MapPin, RefreshCw, Save, Shuffle } from "lucide-react";
+import { MapPin, RefreshCw, Save, Shuffle, Pin } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { MapContainer, Marker, Polyline, Popup, TileLayer } from "react-leaflet";
+import { MapContainer, Marker, Polyline, Popup, TileLayer, useMapEvents } from "react-leaflet";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { MotionCard } from "../components/ui/motion";
@@ -38,6 +38,8 @@ export default function TrackMap() {
   const [route, setRoute] = useState<LatLngTuple[]>([resolvedStart, ...("waypoints" in routePlan ? routePlan.waypoints : [])]);
   const [customerPickup, setCustomerPickup] = useState("");
   const [customerDelivery, setCustomerDelivery] = useState("");
+  const [orderMarker, setOrderMarker] = useState<LatLngTuple | null>(null);
+  const [agentMarker, setAgentMarker] = useState<LatLngTuple | null>(null);
 
   useEffect(() => {
     const stops = "waypoints" in routePlan ? routePlan.waypoints : [];
@@ -71,6 +73,33 @@ export default function TrackMap() {
     }
   };
 
+  const pinAgentLocation = () => {
+    if (role !== "agent") return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const coords: LatLngTuple = [pos.coords.latitude, pos.coords.longitude];
+        setAgentMarker(coords);
+        setCenter(coords);
+        setRoute([coords, ...route.slice(1)]);
+        console.log("Agent pinned location", coords);
+      },
+      () => alert("Unable to fetch location")
+    );
+  };
+
+  function ClickHandler() {
+    useMapEvents({
+      click: (e) => {
+        if (role === "customer") {
+          const coords: LatLngTuple = [e.latlng.lat, e.latlng.lng];
+          setOrderMarker(coords);
+          console.log("Customer order location set via map", coords);
+        }
+      },
+    });
+    return null;
+  }
+
   const title = role === "agent" ? "Agent delivery route" : role === "customer" ? "Customer route" : "Operations route";
   const subtitle =
     role === "agent"
@@ -82,25 +111,30 @@ export default function TrackMap() {
   return (
     <div className="min-h-screen">
       <main className="w-full space-y-6 px-4 lg:px-10 lg:py-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <PageTitle>{title}</PageTitle>
-            <p className="text-sm text-muted-foreground">{subtitle}</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={() => setCenter(resolvedStart)} className="gap-2">
-              <RefreshCw size={16} /> Reset center
-            </Button>
-            <Button variant="secondary" onClick={() => setRoute([...route].reverse())} className="gap-2">
-              <Shuffle size={16} /> Reverse route
-            </Button>
-            {role === "agent" && (
-              <Button onClick={saveAgentRoute} className="gap-2">
-                <Save size={16} /> Save route
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <PageTitle>{title}</PageTitle>
+              <p className="text-sm text-muted-foreground">{subtitle}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => setCenter(resolvedStart)} className="gap-2">
+                <RefreshCw size={16} /> Reset center
               </Button>
-            )}
+              <Button variant="secondary" onClick={() => setRoute([...route].reverse())} className="gap-2">
+                <Shuffle size={16} /> Reverse route
+              </Button>
+              {role === "agent" && (
+                <Button onClick={saveAgentRoute} className="gap-2">
+                  <Save size={16} /> Save route
+                </Button>
+              )}
+              {role === "agent" && (
+                <Button variant="secondary" onClick={pinAgentLocation} className="gap-2">
+                  <Pin size={16} /> Pin my location
+                </Button>
+              )}
+            </div>
           </div>
-        </div>
 
         <div className="grid gap-5 lg:grid-cols-[1.2fr,0.9fr]">
           <MotionCard className="p-0">
@@ -135,6 +169,7 @@ export default function TrackMap() {
             </div>
             <div className="h-[560px] w-full overflow-hidden rounded-[28px] border border-[hsl(var(--border))]">
               <MapContainer center={center} zoom={12} className="h-full w-full">
+                <ClickHandler />
                 <TileLayer
                   attribution='&copy; OpenStreetMap contributors'
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -148,6 +183,16 @@ export default function TrackMap() {
                     <Popup>{i === 0 ? "Start" : `Stop ${i}`}</Popup>
                   </Marker>
                 ))}
+                {orderMarker && (
+                  <Marker position={orderMarker} icon={markerIcon}>
+                    <Popup>Order location</Popup>
+                  </Marker>
+                )}
+                {agentMarker && (
+                  <Marker position={agentMarker} icon={markerIcon}>
+                    <Popup>Agent pinned location</Popup>
+                  </Marker>
+                )}
               </MapContainer>
             </div>
           </MotionCard>
@@ -214,6 +259,7 @@ export default function TrackMap() {
                     />
                   </div>
                   <Button type="submit" className="w-full">Share location</Button>
+                  <p className="text-xs text-muted-foreground">Tip: click on the map to mark your order location.</p>
                 </form>
               )}
             </CardContent>

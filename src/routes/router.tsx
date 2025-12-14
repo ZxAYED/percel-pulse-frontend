@@ -24,10 +24,7 @@ export const router = createBrowserRouter([
       { path: "/", element: <Navigate to="/dashboard" replace /> },
       {
         element: <RoleLayout />,
-        children: [
-          { path: "/dashboard", element: <RoleDashboard /> },
-          { path: "/map", element: <TrackMap /> },
-        ],
+        children: [{ path: "/dashboard", element: <RoleDashboard /> }],
       },
       {
         path: "/customer",
@@ -36,6 +33,7 @@ export const router = createBrowserRouter([
           { index: true, element: <CustomerDashboard /> },
           { path: "book", element: <CustomerBook /> },
           { path: "history", element: <CustomerHistory /> },
+          { path: "map", element: <TrackMap /> },
         ],
       },
       {
@@ -63,11 +61,12 @@ export const router = createBrowserRouter([
             children: [
               { index: true, element: <AgentOverview /> },
               { path: "tasks", element: <AgentTasks /> },
+              { path: "map", element: <TrackMap /> },
             ],
           },
         ],
       },
     ],
   },
-  { path: "*", element: <Navigate to="/dashboard" replace /> },
+  
 ]);

@@ -13,12 +13,12 @@ export const ADMIN_NAV: NavItem[] = [
 export const AGENT_NAV: NavItem[] = [
   { to: "/agent", label: "Overview", i18nKey: "overview", icon: LayoutDashboard },
   { to: "/agent/tasks", label: "Tasks & COD", i18nKey: "tasks", icon: ClipboardList },
-  { to: "/map", label: "Route Map", i18nKey: "route", icon: Map },
+  { to: "/agent/map", label: "Route Map", i18nKey: "route", icon: Map },
 ];
 
 export const CUSTOMER_NAV: NavItem[] = [
   { to: "/customer", label: "Dashboard", i18nKey: "dashboard", icon: LayoutDashboard },
   { to: "/customer/book", label: "Book pickup", i18nKey: "book", icon: Package },
   { to: "/customer/history", label: "History", i18nKey: "history", icon: ClipboardList },
-  { to: "/map", label: "Track", i18nKey: "map", icon: Map },
+  { to: "/customer/map", label: "Track", i18nKey: "map", icon: Map },
 ];
