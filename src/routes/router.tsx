@@ -14,14 +14,15 @@ import Login from "../pages/Login";
 import Register from "../pages/Register";
 import RoleDashboard from "../pages/RoleDashboard";
 import TrackMap from "../pages/TrackMap";
+import RoleRoute from "./RoleRoute";
 
 export const router = createBrowserRouter([
   { path: "/login", element: <Login />  },
   { path: "/register", element: <Register /> },
+   { path: "/", element: <Navigate to="/Login" replace /> },
   {
-    // element: <PrivateRoute />,
+    element:  <RoleRoute allow={["customer"]} />,
     children: [
-      { path: "/", element: <Navigate to="/dashboard" replace /> },
       {
         element: <RoleLayout />,
         children: [{ path: "/dashboard", element: <RoleDashboard /> }],
@@ -37,7 +38,7 @@ export const router = createBrowserRouter([
         ],
       },
       {
-        // element: <RoleRoute allow={["admin"]} />,
+        element: <RoleRoute allow={["admin"]} />,
         children: [
           {
             path: "/admin",
@@ -53,7 +54,7 @@ export const router = createBrowserRouter([
         ],
       },
       {
-        // element: <RoleRoute allow={["agent"]} />,
+        element: <RoleRoute allow={["agent"]} />,
         children: [
           {
             path: "/agent",

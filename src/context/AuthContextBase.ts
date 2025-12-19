@@ -3,8 +3,10 @@ import { createContext } from "react";
 export type Role = "admin" | "agent" | "customer";
 
 export type AuthUser = {
+  id: string;
   name: string;
   email: string;
+  phone?: string | null;
   role: Role;
 };
 

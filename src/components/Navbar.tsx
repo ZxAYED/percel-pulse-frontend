@@ -11,11 +11,20 @@ import { MotionButton } from "./ui/motion";
 import { Sheet, SheetContent, SheetTrigger } from "./ui/sheet";
 
 export default function Navbar() {
-  const { logout, role } = useAuth();
+  const { logout, role, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { i18n, t } = useTranslation();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const userName = user?.name ?? "Guest user";
+  const userEmail = user?.email ?? "Not signed in";
+  const userInitials = (user?.name?.trim() || user?.email?.trim() || "GU")
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 
   useEffect(() => {
     document.body.style.overflow = isSheetOpen ? "hidden" : "";
@@ -83,6 +92,17 @@ export default function Navbar() {
                       <X size={18} />
                     </MotionButton>
                   </div>
+                  <div className="px-4 pb-4">
+                    <div className="flex items-center gap-3 rounded-2xl border border-[hsl(var(--border))] bg-secondary/70 px-4 py-3">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-base font-semibold uppercase text-primary">
+                        {userInitials}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">{userName}</p>
+                        <p className="text-xs text-muted-foreground">{userEmail}</p>
+                      </div>
+                    </div>
+                  </div>
                   <nav className="flex-1 overflow-y-auto px-2 pb-4">
                     {navItems.map(({ to, label, icon: Icon, i18nKey }) => (
                       <NavLink
@@ -143,30 +163,36 @@ export default function Navbar() {
           </div>
           <div className="hidden items-center gap-2 lg:flex">
             {navItems.slice(0, 4).map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) =>
-                cn(
-                  "text-sm",
-                  isActive ? "text-primary" : "text-foreground/80"
-                )
-              }
-            >
-              {({ isActive }) => (
-                <MotionButton
-                  variant="ghost"
-                  size="sm"
-                  className={cn(
-                    "gap-2 rounded-xl border border-transparent bg-transparent text-foreground hover:bg-secondary",
-                    isActive && "border-[hsl(var(--border))] bg-white shadow-sm text-primary"
-                  )}
-                >
-                  <item.icon size={16} /> {t(`nav.${item.i18nKey ?? item.label.toLowerCase()}`, { defaultValue: item.label })}
-                </MotionButton>
-              )}
-            </NavLink>
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) => cn("text-sm", isActive ? "text-primary" : "text-foreground/80")}
+              >
+                {({ isActive }) => (
+                  <MotionButton
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                      "gap-2 rounded-xl border border-transparent bg-transparent text-foreground hover:bg-secondary",
+                      isActive && "border-[hsl(var(--border))] bg-white shadow-sm text-primary"
+                    )}
+                  >
+                    <item.icon size={16} /> {t(`nav.${item.i18nKey ?? item.label.toLowerCase()}`, { defaultValue: item.label })}
+                  </MotionButton>
+                )}
+              </NavLink>
             ))}
+          </div>
+          <div className="hidden md:flex items-center gap-3 rounded-2xl border border-[hsl(var(--border))] bg-white px-3 py-2 shadow-sm">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-secondary text-sm font-semibold uppercase text-primary">
+              {userInitials}
+            </div>
+            <div className="leading-tight">
+              <p className="text-sm font-semibold text-foreground">{userName}</p>
+              <p className="text-xs text-muted-foreground max-w-[180px] truncate" title={userEmail}>
+                {userEmail}
+              </p>
+            </div>
           </div>
           <div className="hidden items-center gap-1 rounded-xl border border-[hsl(var(--border))] bg-white px-2 py-1 text-sm font-semibold text-foreground shadow-sm sm:flex">
             <button
