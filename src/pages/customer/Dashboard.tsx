@@ -1,13 +1,59 @@
-import { ArrowRight, MapPin, Package } from "lucide-react";
+import { MapPin, Package } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { MotionCard } from "../../components/ui/motion";
+import { Select } from "../../components/ui/select";
 import { PageTitle, SectionTitle } from "../../components/ui/title";
-import { customerBookings } from "../../data/customer";
+import { toastError } from "../../lib/utils";
+import { customerDashboardMetrics } from "../../services/reports";
+import type { CustomerDashboardMetrics, CustomerDashboardRecentParcel } from "../../services/types";
 
 export default function CustomerDashboard() {
-  const active = customerBookings.slice(0, 2);
+  const [metrics, setMetrics] = useState<CustomerDashboardMetrics | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [windowSize, setWindowSize] = useState<7 | 14 | 30>(14);
+
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    customerDashboardMetrics()
+      .then((data) => {
+        if (!mounted) return;
+        setMetrics(data);
+      })
+      .catch((err) => {
+        if (!mounted) return;
+        setMetrics(null);
+        toastError(err, "Failed to load dashboard metrics");
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const cards = metrics?.cards;
+
+  const bookingsTrend = useMemo(() => {
+    const byDay = metrics?.bookingsByDay ?? {};
+    const entries = Object.entries(byDay)
+      .map(([date, value]) => ({ date, value: Number(value) }))
+      .filter((x) => Number.isFinite(x.value))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    return entries.slice(-windowSize);
+  }, [metrics?.bookingsByDay, windowSize]);
+
+  const recentParcels = metrics?.recentParcels ?? [];
+  const activeParcels = useMemo<CustomerDashboardRecentParcel[]>(() => {
+    return recentParcels.filter((p) => ["BOOKED", "PICKED_UP", "IN_TRANSIT"].includes(p.status)).slice(0, 5);
+  }, [recentParcels]);
+
+  const formatMoney = (n: number | undefined) => (n === undefined ? "—" : `BDT ${new Intl.NumberFormat().format(n)}`);
 
   return (
     <div className="space-y-6">
@@ -22,7 +68,7 @@ export default function CustomerDashboard() {
               <Package size={16} /> Book pickup
             </Button>
           </Link>
-          <Link to="/map">
+          <Link to="/customer/map">
             <Button variant="secondary" className="gap-2">
               <MapPin size={16} /> Live map
             </Button>
@@ -32,10 +78,10 @@ export default function CustomerDashboard() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {[
-          { label: "Active bookings", value: active.length, helper: "In progress today" },
-          { label: "Delivered", value: 36, helper: "This month" },
-          { label: "COD pending", value: "BDT 18,450", helper: "Collect on delivery" },
-          { label: "Next pickup", value: "14:10", helper: "Assigned rider" },
+          { label: "Active parcels", value: cards?.activeParcels ?? "—", helper: "In progress" },
+          { label: "Delivered", value: cards?.deliveredParcels ?? "—", helper: "Total delivered" },
+          { label: "COD pending", value: cards ? formatMoney(cards.codPendingAmount) : "—", helper: "Collect on delivery" },
+          { label: "Upcoming pickups", value: cards?.upcomingPickups ?? "—", helper: "Scheduled next" },
         ].map((item) => (
           <Card key={item.label} className="p-0">
             <CardHeader className="pb-2">
@@ -43,11 +89,54 @@ export default function CustomerDashboard() {
             </CardHeader>
             <CardContent className="space-y-1">
               <p className="text-3xl font-semibold text-foreground">{item.value}</p>
-              <p className="text-xs text-emerald-600">{item.helper}</p>
+              <p className="text-xs text-emerald-600">{loading ? "Loading…" : item.helper}</p>
             </CardContent>
           </Card>
         ))}
       </div>
+
+      <MotionCard className="p-0">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[hsl(var(--border))] px-6 py-5">
+          <div>
+            <SectionTitle className="text-foreground">Bookings trend</SectionTitle>
+            <p className="text-sm text-muted-foreground">Daily bookings for the selected range.</p>
+          </div>
+          <div className="w-44">
+            <Select
+              value={String(windowSize)}
+              onChange={(v) => setWindowSize(Number(v) as 7 | 14 | 30)}
+              options={[
+                { label: "Last 7 days", value: "7" },
+                { label: "Last 14 days", value: "14" },
+                { label: "Last 30 days", value: "30" },
+              ]}
+            />
+          </div>
+        </div>
+        <div className="space-y-2 px-6 py-5">
+          {bookingsTrend.length === 0 ? (
+            <div className="rounded-2xl border border-[hsl(var(--border))] bg-secondary px-4 py-3 text-sm text-muted-foreground">
+              {loading ? "Loading…" : "No trend data."}
+            </div>
+          ) : (
+            bookingsTrend.map((p) => {
+              const max = Math.max(...bookingsTrend.map((x) => x.value), 1);
+              return (
+                <div key={p.date} className="grid grid-cols-[110px,1fr,90px] items-center gap-3 text-sm">
+                  <div className="truncate text-muted-foreground">{p.date}</div>
+                  <div className="h-2 overflow-hidden rounded-full bg-secondary">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-primary to-emerald-300"
+                      style={{ width: `${Math.max(3, Math.round((p.value / max) * 100))}%` }}
+                    />
+                  </div>
+                  <div className="text-right font-semibold text-foreground">{new Intl.NumberFormat().format(p.value)}</div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </MotionCard>
 
       <div className="grid gap-5 lg:grid-cols-[1.4fr,1fr]">
         <MotionCard className="p-0">
@@ -56,17 +145,34 @@ export default function CustomerDashboard() {
             <span className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-primary">Live</span>
           </div>
           <div className="space-y-3 px-6 py-5">
-            {active.map((item) => (
-              <div key={item.id} className="flex items-center justify-between rounded-2xl border border-[hsl(var(--border))] bg-white px-4 py-3 shadow-sm">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">{item.id}</p>
-                  <p className="text-xs text-muted-foreground">{item.pickup} → {item.delivery}</p>
-                </div>
-                <span className="rounded-full bg-secondary px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                  {item.status}
-                </span>
+            {loading && (
+              <div className="rounded-2xl border border-[hsl(var(--border))] bg-secondary px-4 py-3 text-sm text-muted-foreground">
+                Loading parcels…
               </div>
-            ))}
+            )}
+            {!loading && activeParcels.length === 0 && (
+              <div className="rounded-2xl border border-[hsl(var(--border))] bg-secondary px-4 py-3 text-sm text-muted-foreground">
+                No active parcels.
+              </div>
+            )}
+            {!loading &&
+              activeParcels.map((p) => (
+                <Link
+                  key={p.id}
+                  to={`/customer/parcels/${p.id}`}
+                  className="flex items-center justify-between rounded-2xl border border-[hsl(var(--border))] bg-white px-4 py-3 shadow-sm transition hover:bg-secondary"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-foreground">{p.trackingNumber}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {p.pickupAddress} → {p.deliveryAddress}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-secondary px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    {p.status}
+                  </span>
+                </Link>
+              ))}
           </div>
         </MotionCard>
 
@@ -76,17 +182,34 @@ export default function CustomerDashboard() {
             <Link to="/customer/history" className="text-sm text-primary hover:underline">View all</Link>
           </div>
           <div className="space-y-3 px-6 py-5">
-            {customerBookings.slice(0, 3).map((item) => (
-              <div key={item.id} className="flex items-center justify-between rounded-2xl border border-[hsl(var(--border))] bg-white px-4 py-3 shadow-sm">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">{item.id}</p>
-                  <p className="text-xs text-muted-foreground">{item.pickup} → {item.delivery}</p>
-                </div>
-                <span className="rounded-full bg-secondary px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                  {item.status}
-                </span>
+            {loading && (
+              <div className="rounded-2xl border border-[hsl(var(--border))] bg-secondary px-4 py-3 text-sm text-muted-foreground">
+                Loading history…
               </div>
-            ))}
+            )}
+            {!loading && recentParcels.length === 0 && (
+              <div className="rounded-2xl border border-[hsl(var(--border))] bg-secondary px-4 py-3 text-sm text-muted-foreground">
+                No recent parcels.
+              </div>
+            )}
+            {!loading &&
+              recentParcels.slice(0, 5).map((p) => (
+                <Link
+                  key={p.id}
+                  to={`/customer/parcels/${p.id}`}
+                  className="flex items-center justify-between rounded-2xl border border-[hsl(var(--border))] bg-white px-4 py-3 shadow-sm transition hover:bg-secondary"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-foreground">{p.trackingNumber}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {p.pickupAddress} → {p.deliveryAddress}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-secondary px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    {p.status}
+                  </span>
+                </Link>
+              ))}
           </div>
         </MotionCard>
       </div>

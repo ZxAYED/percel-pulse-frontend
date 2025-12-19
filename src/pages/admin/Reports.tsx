@@ -1,20 +1,71 @@
 import { Download, FileDown } from "lucide-react";
+import { useState } from "react";
+import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
+import { Select } from "../../components/ui/select";
 import { SectionTitle } from "../../components/ui/title";
 import { adminBookings, adminReports } from "../../data/admin";
+import { toastError, toastSuccess } from "../../lib/utils";
+import { exportAdminParcelsCsv, exportAdminParcelsPdf, exportAdminUsersCsv, exportAdminUsersPdf } from "../../services/reports";
 
 export default function Reports() {
+  const [entity, setEntity] = useState<"parcels" | "users">("parcels");
+  const [downloading, setDownloading] = useState<"csv" | "pdf" | null>(null);
+
+  const saveBlob = (blob: Blob, filename: string) => {
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const onExport = (format: "csv" | "pdf") => {
+    setDownloading(format);
+    const runner =
+      entity === "parcels"
+        ? format === "csv"
+          ? exportAdminParcelsCsv
+          : exportAdminParcelsPdf
+        : format === "csv"
+          ? exportAdminUsersCsv
+          : exportAdminUsersPdf;
+
+    runner()
+      .then(({ blob, filename }) => {
+        saveBlob(blob, filename);
+        toastSuccess("Export downloaded");
+      })
+      .catch((err) => {
+        toastError(err, "Failed to export");
+      })
+      .finally(() => setDownloading(null));
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SectionTitle>Reports</SectionTitle>
-        <div className="flex gap-2">
-          <button className="inline-flex items-center gap-2 rounded-xl border border-[hsl(var(--border))] bg-white px-4 py-2 text-sm font-semibold text-foreground shadow-sm transition hover:bg-secondary">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="w-48">
+            <Select
+              value={entity}
+              onChange={(v) => setEntity(v as "parcels" | "users")}
+              options={[
+                { label: "Parcels", value: "parcels" },
+                { label: "Users", value: "users" },
+              ]}
+            />
+          </div>
+          <Button variant="secondary" disabled={downloading !== null} onClick={() => onExport("csv")} className="gap-2">
             <FileDown size={16} /> Export CSV
-          </button>
-          <button className="inline-flex items-center gap-2 rounded-xl border border-[hsl(var(--border))] bg-white px-4 py-2 text-sm font-semibold text-foreground shadow-sm transition hover:bg-secondary">
+          </Button>
+          <Button variant="secondary" disabled={downloading !== null} onClick={() => onExport("pdf")} className="gap-2">
             <Download size={16} /> Export PDF
-          </button>
+          </Button>
         </div>
       </div>
       <Card>

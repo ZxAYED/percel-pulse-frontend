@@ -1,5 +1,5 @@
-import { NavLink } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { NavLink } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { brandName } from "../lib/brand";
 import { ADMIN_NAV, AGENT_NAV, CUSTOMER_NAV } from "../lib/navigation";
@@ -7,10 +7,11 @@ import { cn } from "../lib/utils";
 
 export default function Sidebar() {
   const { role } = useAuth();
-  const items = role === "admin" ? ADMIN_NAV : role === "agent" ? AGENT_NAV : CUSTOMER_NAV;
+  const items = role === "ADMIN" ? ADMIN_NAV : role === "AGENT" ? AGENT_NAV : CUSTOMER_NAV;
+  const homeTo = role === "ADMIN" ? "/admin" : role === "AGENT" ? "/agent" : "/customer";
   const { t } = useTranslation();
   return (
-    <aside className="relative flex w-72 flex-col gap-2 overflow-hidden rounded-3xl border border-[hsl(var(--border))] bg-white p-4 shadow-[0_18px_60px_-44px_rgba(15,23,42,0.35)] lg:fixed lg:left-6 lg:top-24 lg:h-[calc(100vh-7rem)]">
+    <aside className="relative flex w-72 flex-col gap-2 overflow-hidden rounded-3xl border border-[hsl(var(--border))] bg-white p-4 shadow-[0_18px_60px_-44px_rgba(15,23,42,0.35)] lg:fixed lg:left-6 lg:h-[calc(100vh-7rem)]">
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-slate-100" aria-hidden />
       <div className="relative flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
         <div className="flex items-center gap-3">
@@ -29,6 +30,7 @@ export default function Sidebar() {
           <NavLink
             key={to}
             to={to}
+            end={to === homeTo}
             className={({ isActive }) =>
               cn(
                 "group flex items-center gap-3 rounded-2xl px-4 py-3 md:text-lg text-base font-medium transition-all duration-200",

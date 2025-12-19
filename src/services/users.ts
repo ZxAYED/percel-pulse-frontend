@@ -1,5 +1,5 @@
 import { http } from "./http";
-import type { ApiResponse, Paginated, User } from "./types";
+import type { AdminUser, AdminUsersResponse, ApiResponse, Paginated, User } from "./types";
 
 export async function listUsers(params?: { page?: number; pageSize?: number; role?: User["role"] }) {
   const res = await http.get<ApiResponse<Paginated<User>>>("/users", { params });
@@ -16,3 +16,21 @@ export async function updateUser(id: string, payload: Partial<User>) {
   return res.data.data;
 }
 
+export type ListAdminUsersQuery = {
+  page?: number;
+  limit?: number;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
+  searchTerm?: string;
+  role?: User["role"];
+  isActive?: boolean;
+  isVerified?: boolean;
+  email?: string;
+  phone?: string;
+  [key: string]: string | number | boolean | undefined;
+};
+
+export async function listAdminUsers(params?: ListAdminUsersQuery) {
+  const res = await http.get<ApiResponse<AdminUsersResponse<AdminUser>>>("/admin/users", { params });
+  return res.data.data;
+}

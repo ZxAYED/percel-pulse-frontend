@@ -37,10 +37,11 @@ export default function Navbar() {
     setIsSheetOpen(false);
   }, [location.pathname]);
 
-  const navItems = role === "admin" ? ADMIN_NAV : role === "agent" ? AGENT_NAV : CUSTOMER_NAV;
+  const navItems = role === "ADMIN" ? ADMIN_NAV : role === "AGENT" ? AGENT_NAV : CUSTOMER_NAV;
+  const homeTo = role === "ADMIN" ? "/admin" : role === "AGENT" ? "/agent" : "/customer";
 
   return (
-    <header className="sticky top-0 w-full border-b border-[hsl(var(--border))] bg-white/90  z-50 backdrop-blur-xl shadow-[0_10px_40px_-28px_rgba(15,23,42,0.35)]">
+    <header className="sticky top-0 w-full border-b border-[hsl(var(--border))] bg-white/90 py-2 z-50 backdrop-blur-xl shadow-[0_10px_40px_-28px_rgba(15,23,42,0.35)]">
       <div className="flex h-16 w-full items-center justify-between px-4 lg:px-8">
         <Link to="/" className="flex items-center gap-3">
           <motion.div
@@ -108,6 +109,7 @@ export default function Navbar() {
                       <NavLink
                         key={to}
                         to={to}
+                        end={to === homeTo}
                         className={({ isActive }) =>
                           cn(
                             "flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-colors",
@@ -166,6 +168,7 @@ export default function Navbar() {
               <NavLink
                 key={item.to}
                 to={item.to}
+                end={item.to === homeTo}
                 className={({ isActive }) => cn("text-sm", isActive ? "text-primary" : "text-foreground/80")}
               >
                 {({ isActive }) => (

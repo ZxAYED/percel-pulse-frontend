@@ -1,7 +1,8 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import type { Role } from "../context/AuthContextBase";
 
-export default function RoleRoute({ allow }: { allow: Array<"admin" | "agent" | "customer"> }) {
+export default function RoleRoute({ allow }: { allow: Array<Role> }) {
   
   const { isAuthenticated, role } = useAuth();
   const location = useLocation();
@@ -15,5 +16,8 @@ export default function RoleRoute({ allow }: { allow: Array<"admin" | "agent" | 
      return <Outlet />;
 
 
-  return <Navigate to="/dashboard" replace />;
+  if (role === "ADMIN") return <Navigate to="/admin" replace />;
+  if (role === "AGENT") return <Navigate to="/agent" replace />;
+  if (role === "CUSTOMER") return <Navigate to="/customer" replace />;
+  return <Navigate to="/login" replace />;
 }

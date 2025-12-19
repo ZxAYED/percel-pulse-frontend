@@ -1,15 +1,14 @@
-import { motion } from "framer-motion";
-import { Loader2, MapPin, ShieldCheck, TrendingUp, Truck } from "lucide-react";
+import { Eye, EyeOff, Loader2, MapPin, ShieldCheck, TrendingUp } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
 import regisBg from "../assets/regis.png";
+import { Button } from "../components/ui/button";
 import { CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { MotionButton, MotionCard } from "../components/ui/motion";
 import { Select } from "../components/ui/select";
-import { PageTitle } from "../components/ui/title";
 import { brandName } from "../lib/brand";
 import { runWithToast } from "../lib/utils";
 import { registerUser, resendOtp, verifyOtp } from "../services/auth";
@@ -26,6 +25,7 @@ export default function Register() {
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
   const [otpExpiresAt, setOtpExpiresAt] = useState<string | null>(null);
   const [isResending, setIsResending] = useState(false);
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
   const { register, handleSubmit, setValue, watch, formState } = useForm<RegisterForm>({
     defaultValues: { name: "", email: "", password: "", role: "CUSTOMER" },
@@ -80,72 +80,112 @@ export default function Register() {
     { icon: TrendingUp, title: "Ops analytics", desc: "Bookings, COD, and failed deliveries surfaced instantly." },
   ];
 
+  const quickStats = [
+    { label: "New workspaces", value: "42", meta: "today" },
+    { label: "Agents invited", value: "188", meta: "this week" },
+    { label: "Automation rules", value: "67", meta: "active" },
+  ];
+
+  const onboardingMoments = [
+    { title: "Invite teammates", desc: "Share links that expire in 5 minutes." },
+    { title: "Zone routing", desc: "Preset service areas and fallback carriers." },
+    { title: "Data guard", desc: "SOC2-ready access logs for every login." },
+  ];
+
+  const badgeText = isOtpStep ? "Verify email" : "Create workspace";
+
   return (
     <div
-      className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-cover bg-center bg-no-repeat px-4"
-      style={{ backgroundImage: `url(${regisBg})` }}
+      className="min-h-dvh bg-cover bg-center bg-no-repeat px-4 py-6 lg:py-10"
+      style={{ backgroundImage: `linear-gradient(120deg, rgba(6,95,70,0.12), rgba(15,23,42,0.25)), url(${regisBg})` }}
     >
-    
-      <div className="relative mx-auto flex max-w-6xl flex-col gap-8 px-4 py-12 lg:flex-row lg:py-16">
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="hidden w-full rounded-3xl border border-[hsl(var(--border))] bg-white p-8 shadow-xl lg:block lg:w-1/2"
-        >
-          <div className="inline-flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-primary">
-            <Truck size={14} /> Start faster
-          </div>
-          <PageTitle className="mt-4">{brandName}</PageTitle>
-          <p className="mt-2 text-base text-muted-foreground">
-            Create your account and jump straight into parcel booking, tracking, and agent assignments.
-          </p>
-          <div className="mt-6 grid gap-3 sm:grid-cols-3">
-            {[
-              { label: "New today", value: "42 bookings" },
-              { label: "Agents online", value: "24" },
-              { label: "Support", value: "Live chat" },
-            ].map((item) => (
-              <div key={item.label} className="rounded-2xl border border-[hsl(var(--border))] bg-secondary p-3">
-                <p className="text-xs text-muted-foreground">{item.label}</p>
-                <p className="text-xl font-semibold text-foreground">{item.value}</p>
+      <main className="mx-auto grid w-full max-w-6xl gap-6 lg:min-h-[80dvh] lg:grid-cols-[1.05fr,0.95fr]">
+        <MotionCard className="flex flex-col gap-5 rounded-[32px] border-none bg-white/90 p-6 shadow-[0_40px_130px_-70px_rgba(15,23,42,0.75)] backdrop-blur">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary shadow-inner ring-1 ring-[hsl(var(--border))]">
+                <img src="/logo.svg" alt={brandName} className="h-6 w-6" />
               </div>
-            ))}
-          </div>
-          <div className="mt-6 space-y-3">
-            {highlights.map(({ icon: Icon, title, desc }) => (
-              <div key={title} className="flex items-start gap-3 rounded-2xl border border-[hsl(var(--border))] bg-white p-3 shadow-sm">
-                <span className="mt-1 flex h-9 w-9 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                  <Icon size={18} />
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-foreground">{title}</p>
-                  <p className="text-xs text-muted-foreground">{desc}</p>
-                </div>
+              <div className="leading-tight">
+                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Courier onboarding</p>
+                <p className="text-lg font-semibold text-foreground">{brandName}</p>
               </div>
-            ))}
+            </div>
+            <span className="rounded-full border border-[hsl(var(--border))] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-600">
+              Guided setup
+            </span>
           </div>
-        </motion.div>
-
-        <MotionCard className="relative w-full max-w-xl border border-[hsl(var(--border))] bg-white shadow-xl lg:w-1/2">
-          <CardHeader>
-            <CardTitle className="text-2xl font-semibold text-foreground">
-              {isOtpStep ? "Verify your email" : "Create account"}
-            </CardTitle>
+          <div className="space-y-2">
+            <h1 className="text-3xl font-semibold text-foreground">Spin up your workspace</h1>
             <p className="text-sm text-muted-foreground">
-              {isOtpStep
-                ? "Enter the 6-digit OTP we sent to confirm your email address."
-                : "Register to book pickups, track parcels, and manage assignments."}
+              Register and go live with parcel booking, tracking, and agent assignments inside minutes.
             </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {quickStats.map((item) => (
+              <div key={item.label} className="rounded-2xl border border-[hsl(var(--border))] bg-white px-4 py-3 shadow-sm">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{item.label}</p>
+                <p className="text-2xl font-semibold text-foreground">{item.value}</p>
+                <p className="text-xs text-muted-foreground">{item.meta}</p>
+              </div>
+            ))}
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-[24px] border border-[hsl(var(--border))] bg-white px-4 py-5 shadow-sm">
+              <p className="text-sm font-semibold text-foreground">Why teams switch</p>
+              <div className="mt-4 space-y-3">
+                {highlights.map(({ icon: Icon, title, desc }) => (
+                  <div key={title} className="flex items-start gap-3 rounded-2xl p-2">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                      <Icon size={18} />
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">{title}</p>
+                      <p className="text-xs text-muted-foreground">{desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-[24px] border border-[hsl(var(--border))] bg-gradient-to-br from-primary/10 via-emerald-50 to-white px-4 py-5 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Your first hour</p>
+              <div className="mt-4 space-y-3">
+                {onboardingMoments.map((item) => (
+                  <div key={item.title} className="rounded-2xl border border-white/60 bg-white/90 p-3">
+                    <p className="text-sm font-semibold text-foreground">{item.title}</p>
+                    <p className="text-xs text-muted-foreground">{item.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </MotionCard>
+
+        <MotionCard className="flex flex-col rounded-[32px] border-none bg-white/95 p-6 shadow-[0_45px_130px_-90px_rgba(15,23,42,0.8)]">
+          <CardHeader className="space-y-4 p-0">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <span className="inline-flex items-center gap-2 rounded-full bg-secondary px-4 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+                {badgeText}
+              </span>
+              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground" type="button">
+                Support
+              </Button>
+            </div>
+            <div>
+              <CardTitle className="text-3xl font-semibold text-foreground">{isOtpStep ? "Verify your email" : "Create account"}</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                {isOtpStep ? "Enter the 6-digit OTP we sent to confirm your email address." : "Set up courier access for admins, agents, or customers."}
+              </p>
+            </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="mt-6 flex-1 p-0">
             {isOtpStep ? (
-              <form onSubmit={onVerifyOtp} className="space-y-5">
-                <div className="rounded-2xl border border-[hsl(var(--border))] bg-secondary/60 p-4 text-sm text-muted-foreground">
-                  We sent an OTP to <span className="font-semibold text-foreground">{pendingEmail}</span>.{" "}
+              <form onSubmit={onVerifyOtp} className="space-y-4">
+                <div className="rounded-2xl border border-[hsl(var(--border))] bg-secondary/60 px-4 py-3 text-sm text-muted-foreground">
+                  OTP sent to <span className="font-semibold text-foreground">{pendingEmail}</span>.{" "}
                   {expiresLabel ? `Expires around ${expiresLabel}.` : "Expires in 5 minutes."}
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1">
                   <Label htmlFor="otp">One-time password</Label>
                   <Input
                     id="otp"
@@ -156,7 +196,7 @@ export default function Register() {
                   />
                 </div>
                 <div className="flex flex-wrap gap-3">
-                  <MotionButton type="submit" className="flex-1 gap-2" disabled={otpState.isSubmitting}>
+                  <MotionButton type="submit" className="flex-1 gap-2 rounded-2xl" disabled={otpState.isSubmitting}>
                     {otpState.isSubmitting ? (
                       <>
                         <Loader2 size={16} className="animate-spin" /> Verifying
@@ -168,7 +208,7 @@ export default function Register() {
                   <MotionButton
                     type="button"
                     variant="secondary"
-                    className="flex-1"
+                    className="flex-1 rounded-2xl"
                     onClick={handleResend}
                     disabled={otpState.isSubmitting || isResending}
                   >
@@ -194,24 +234,35 @@ export default function Register() {
               </form>
             ) : (
               <form onSubmit={onSubmit} className="space-y-4">
-                <div className="space-y-2">
+                <div className="space-y-1">
                   <Label htmlFor="name">Full name</Label>
                   <Input id="name" placeholder="John Doe" {...register("name", { required: true })} />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1">
                   <Label htmlFor="email">Email</Label>
                   <Input id="email" type="email" placeholder="name@email.com" {...register("email", { required: true })} />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1">
                   <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="••••••••"
-                    {...register("password", { required: true, minLength: 6 })}
-                  />
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={isPasswordVisible ? "text" : "password"}
+                      placeholder="********"
+                      className="pr-11"
+                      {...register("password", { required: true, minLength: 6 })}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setIsPasswordVisible((prev) => !prev)}
+                      className="absolute inset-y-0 right-3 flex items-center text-muted-foreground transition hover:text-foreground"
+                      aria-label={isPasswordVisible ? "Hide password" : "Show password"}
+                    >
+                      {isPasswordVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1">
                   <Label htmlFor="role">Role</Label>
                   <Select
                     value={role}
@@ -222,8 +273,9 @@ export default function Register() {
                       { label: "Admin", value: "ADMIN" },
                     ]}
                   />
+                  <p className="text-xs text-muted-foreground">Pick how we tailor onboarding tips.</p>
                 </div>
-                <MotionButton type="submit" className="w-full gap-2" disabled={formState.isSubmitting}>
+                <MotionButton type="submit" className="w-full gap-2 rounded-2xl" disabled={formState.isSubmitting}>
                   {formState.isSubmitting ? <Loader2 size={16} className="animate-spin" /> : "Register"}
                 </MotionButton>
                 <div className="text-center text-sm text-muted-foreground">
@@ -236,7 +288,7 @@ export default function Register() {
             )}
           </CardContent>
         </MotionCard>
-      </div>
+      </main>
     </div>
   );
 }

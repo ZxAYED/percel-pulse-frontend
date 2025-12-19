@@ -1,29 +1,64 @@
-import { ArrowRight, BadgeCheck, MapPin, Phone, Timer, Truck } from "lucide-react";
+import { MapPin, Phone, Timer } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { MotionCard } from "../../components/ui/motion";
+import { Select } from "../../components/ui/select";
 import { PageTitle, SectionTitle } from "../../components/ui/title";
+import { toastError } from "../../lib/utils";
+import { agentDashboardMetrics } from "../../services/reports";
+import type { AgentDashboardMetrics, AgentDashboardRecentParcel } from "../../services/types";
 
 export default function AgentOverview() {
+  const [metrics, setMetrics] = useState<AgentDashboardMetrics | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [windowSize, setWindowSize] = useState<7 | 14 | 30>(14);
+
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    agentDashboardMetrics()
+      .then((data) => {
+        if (!mounted) return;
+        setMetrics(data);
+      })
+      .catch((err) => {
+        if (!mounted) return;
+        setMetrics(null);
+        toastError(err, "Failed to load agent dashboard metrics");
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const cards = metrics?.cards;
+  const recent = metrics?.recentParcels ?? [];
+  const nextStopParcel = useMemo<AgentDashboardRecentParcel | null>(() => {
+    return recent.length ? recent[0] : null;
+  }, [recent]);
+
+  const deliveredTrend = useMemo(() => {
+    const byDay = metrics?.deliveredByDay ?? {};
+    const entries = Object.entries(byDay)
+      .map(([date, value]) => ({ date, value: Number(value) }))
+      .filter((x) => Number.isFinite(x.value))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    return entries.slice(-windowSize);
+  }, [metrics?.deliveredByDay, windowSize]);
+
+  const formatMoney = (n: number | undefined) => (n === undefined ? "—" : `BDT ${new Intl.NumberFormat().format(n)}`);
+
   const stats = [
-    { label: "Stops today", value: "12", helper: "3 completed" },
-    { label: "Parcels left", value: "18", helper: "Next hub: Banani" },
-    { label: "On-time", value: "96%", helper: "ETA under 10m" },
-    { label: "Cash to collect", value: "? 18,450", helper: "5 COD drops" },
-  ];
-
-  const nextStop = {
-    name: "Lotus Tower, Banani",
-    eta: "14:20",
-    contact: "+880 1711-223344",
-    note: "Fragile | 3 parcels",
-  };
-
-  const timeline = [
-    { title: "Pickup confirmed", time: "12:45 PM", tone: "bg-emerald-100 text-emerald-700" },
-    { title: "Route optimized", time: "12:30 PM", tone: "bg-cyan-100 text-cyan-700" },
-    { title: "Break logged", time: "12:10 PM", tone: "bg-amber-100 text-amber-700" },
+    { label: "Assigned today", value: cards?.assignedToday ?? "—", helper: "New tasks" },
+    { label: "Active assigned", value: cards?.activeAssigned ?? "—", helper: "In progress" },
+    { label: "Delivered today", value: cards?.deliveredToday ?? "—", helper: "Completed" },
+    { label: "COD outstanding", value: cards ? formatMoney(cards.codOutstandingAmount) : "—", helper: "To collect" },
   ];
 
   return (
@@ -31,13 +66,10 @@ export default function AgentOverview() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <PageTitle>Agent shift</PageTitle>
-          <p className="text-sm text-muted-foreground">Your live route, COD, and tasks grouped for today.</p>
+          <p className="text-sm text-muted-foreground">Your delivery metrics and recent activity for today.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="secondary" className="gap-2">
-            <Truck size={16} /> Start shift
-          </Button>
-          <Link to="/map">
+          <Link to="/agent/map">
             <Button size="sm" className="gap-2">
               <MapPin size={16} /> Open route map
             </Button>
@@ -53,76 +85,87 @@ export default function AgentOverview() {
             </CardHeader>
             <CardContent className="space-y-2">
               <p className="text-3xl font-semibold text-foreground">{item.value}</p>
-              <p className="text-xs text-emerald-600">{item.helper}</p>
+              <p className="text-xs text-emerald-600">{loading ? "Loading…" : item.helper}</p>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1.4fr,1fr]">
-        <MotionCard className="p-0">
-          <div className="flex items-center justify-between border-b border-[hsl(var(--border))] px-6 py-5">
-            <div>
-              <SectionTitle className="text-foreground">Next stop</SectionTitle>
-              <p className="text-sm text-muted-foreground">Preview address and COD before you arrive.</p>
-            </div>
-            <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">Live</span>
+      <MotionCard className="p-0">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[hsl(var(--border))] px-6 py-5">
+          <div>
+            <SectionTitle className="text-foreground">Delivered trend</SectionTitle>
+            <p className="text-sm text-muted-foreground">Daily delivered parcels for the selected range.</p>
           </div>
-          <div className="grid gap-4 px-6 py-5 md:grid-cols-[1.2fr,1fr]">
-            <div className="space-y-3 rounded-2xl border border-[hsl(var(--border))] bg-secondary p-4">
-              <p className="text-lg font-semibold text-foreground">{nextStop.name}</p>
-              <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                <Timer size={16} className="text-primary" />
-                ETA <span className="font-semibold text-foreground">{nextStop.eta}</span>
-              </div>
-              <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                <Phone size={16} className="text-primary" />
-                {nextStop.contact}
-              </div>
-              <p className="text-sm text-muted-foreground">{nextStop.note}</p>
-              <div className="flex flex-wrap gap-2">
-                <Button size="sm" className="gap-2">
-                  <BadgeCheck size={16} /> Arrived
-                </Button>
-                <Button size="sm" variant="secondary" className="gap-2">
-                  <ArrowRight size={16} /> Navigate
-                </Button>
-              </div>
+          <div className="w-44">
+            <Select
+              value={String(windowSize)}
+              onChange={(v) => setWindowSize(Number(v) as 7 | 14 | 30)}
+              options={[
+                { label: "Last 7 days", value: "7" },
+                { label: "Last 14 days", value: "14" },
+                { label: "Last 30 days", value: "30" },
+              ]}
+            />
+          </div>
+        </div>
+        <div className="space-y-2 px-6 py-5">
+          {deliveredTrend.length === 0 ? (
+            <div className="rounded-2xl border border-[hsl(var(--border))] bg-secondary px-4 py-3 text-sm text-muted-foreground">
+              {loading ? "Loading…" : "No trend data."}
             </div>
-            <div className="space-y-3 rounded-2xl border border-[hsl(var(--border))] bg-secondary p-4">
-              <SectionTitle className="text-base">Parcel checklist</SectionTitle>
-              {[
-                { label: "Scan label", status: "Pending" },
-                { label: "Collect COD", status: "Due" },
-                { label: "Capture signature", status: "Pending" },
-              ].map((item) => (
-                <div key={item.label} className="flex items-center justify-between rounded-xl bg-white px-3 py-2 shadow-sm">
-                  <span className="text-sm font-semibold text-foreground">{item.label}</span>
-                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{item.status}</span>
+          ) : (
+            deliveredTrend.map((p) => {
+              const max = Math.max(...deliveredTrend.map((x) => x.value), 1);
+              return (
+                <div key={p.date} className="grid grid-cols-[110px,1fr,90px] items-center gap-3 text-sm">
+                  <div className="truncate text-muted-foreground">{p.date}</div>
+                  <div className="h-2 overflow-hidden rounded-full bg-secondary">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-primary to-emerald-300"
+                      style={{ width: `${Math.max(3, Math.round((p.value / max) * 100))}%` }}
+                    />
+                  </div>
+                  <div className="text-right font-semibold text-foreground">{new Intl.NumberFormat().format(p.value)}</div>
                 </div>
-              ))}
-            </div>
-          </div>
-        </MotionCard>
+              );
+            })
+          )}
+        </div>
+      </MotionCard>
 
-        <MotionCard className="p-0">
-          <div className="flex items-center justify-between border-b border-[hsl(var(--border))] px-6 py-5">
-            <SectionTitle className="text-foreground">Shift feed</SectionTitle>
-            <span className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-muted-foreground">Auto updates</span>
+      <MotionCard className="p-0">
+        <div className="flex items-center justify-between border-b border-[hsl(var(--border))] px-6 py-5">
+          <div>
+            <SectionTitle className="text-foreground">Most recent parcel</SectionTitle>
+            <p className="text-sm text-muted-foreground">Latest parcel from your assigned list.</p>
           </div>
-          <div className="space-y-3 px-6 py-5">
-            {timeline.map((item) => (
-              <div key={item.title} className="flex items-center justify-between rounded-2xl border border-[hsl(var(--border))] bg-white px-4 py-3 shadow-sm">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">{item.title}</p>
-                  <p className="text-xs text-muted-foreground">{item.time}</p>
-                </div>
-                <span className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${item.tone}`}>Live</span>
-              </div>
-            ))}
+          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">Live</span>
+        </div>
+        <div className="px-6 py-5">
+          <div className="space-y-3 rounded-2xl border border-[hsl(var(--border))] bg-secondary p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-lg font-semibold text-foreground">{nextStopParcel?.trackingNumber ?? "—"}</p>
+              <span className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {nextStopParcel?.status ?? "—"}
+              </span>
+            </div>
+            <p className="text-sm text-muted-foreground">{nextStopParcel?.deliveryAddress ?? "No recent parcel"}</p>
+            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              <Timer size={16} className="text-primary" />
+              ETA{" "}
+              <span className="font-semibold text-foreground">
+                {nextStopParcel?.expectedDeliveryAt ?? nextStopParcel?.expectedPickupAt ?? "—"}
+              </span>
+            </div>
+            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              <Phone size={16} className="text-primary" />
+              {nextStopParcel?.customer?.phone ?? "—"}
+            </div>
+            <p className="text-sm text-muted-foreground">{nextStopParcel?.pickupAddress ?? "—"}</p>
           </div>
-        </MotionCard>
-      </div>
+        </div>
+      </MotionCard>
     </div>
   );
 }
