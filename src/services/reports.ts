@@ -2,22 +2,30 @@ import { http } from "./http";
 import type { AdminDashboardMetrics, AgentDashboardMetrics, ApiResponse, CustomerDashboardMetrics } from "./types";
 
 export async function metrics() {
-  const res = await http.get<ApiResponse<{ bookings: number; delivered: number; failed: number; cod: number }>>("/reports/metrics");
+  const res = await http.get<ApiResponse<{ bookings: number; delivered: number; failed: number; cod: number }>>("/reports/metrics", {
+    cache: { tags: ["reportsMetrics"], ttlMs: 30_000 },
+  });
   return res.data.data;
 }
 
 export async function adminDashboardMetrics() {
-  const res = await http.get<ApiResponse<AdminDashboardMetrics>>("/admin/dashboard/metrics");
+  const res = await http.get<ApiResponse<AdminDashboardMetrics>>("/admin/dashboard/metrics", {
+    cache: { tags: ["adminDashboardMetrics"], ttlMs: 15_000 },
+  });
   return res.data.data;
 }
 
 export async function customerDashboardMetrics() {
-  const res = await http.get<ApiResponse<CustomerDashboardMetrics>>("/customer/dashboard/metrics");
+  const res = await http.get<ApiResponse<CustomerDashboardMetrics>>("/customer/dashboard/metrics", {
+    cache: { tags: ["customerDashboardMetrics"], ttlMs: 15_000 },
+  });
   return res.data.data;
 }
 
 export async function agentDashboardMetrics() {
-  const res = await http.get<ApiResponse<AgentDashboardMetrics>>("/agent/dashboard/metrics");
+  const res = await http.get<ApiResponse<AgentDashboardMetrics>>("/agent/dashboard/metrics", {
+    cache: { tags: ["agentDashboardMetrics"], ttlMs: 15_000 },
+  });
   return res.data.data;
 }
 

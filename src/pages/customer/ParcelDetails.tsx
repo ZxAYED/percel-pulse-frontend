@@ -1,15 +1,16 @@
-import type { LatLngBoundsExpression, LatLngTuple } from "leaflet";
-import { useEffect, useMemo, useState } from "react";
-import { MapContainer, Marker, Polyline, Popup, TileLayer } from "react-leaflet";
+import type { LatLngTuple } from "leaflet";
+import "leaflet/dist/leaflet.css";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { ParcelTrackingMap } from "../../components/maps/ParcelTrackingMap";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { SectionTitle } from "../../components/ui/title";
-import { getCustomerParcel, trackCustomerParcel } from "../../services/parcels";
+import { useAuth } from "../../hooks/useAuth";
+import { getCustomerParcel, trackCustomerParcel, trackCustomerParcelCurrent } from "../../services/parcels";
 import type { CustomerParcelDetails, TrackingPoint } from "../../services/types";
-
-const DEFAULT_CENTER: LatLngTuple = [23.8103, 90.4125];
+import { createWsClient } from "../../services/ws";
 
 type ParcelDetailsWithCoords = CustomerParcelDetails & {
   pickupLat?: number | null;
@@ -31,11 +32,13 @@ const statusTone = (value?: string | null) => {
 
 export default function CustomerParcelDetails() {
   const { parcelId } = useParams<{ parcelId?: string }>();
+  const { token } = useAuth();
   const [parcel, setParcel] = useState<ParcelDetailsWithCoords | null>(null);
   const [routePoints, setRoutePoints] = useState<TrackingPoint[]>([]);
   const [agentLocation, setAgentLocation] = useState<LatLngTuple | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const wsRef = useRef<ReturnType<typeof createWsClient> | null>(null);
 
   useEffect(() => {
     if (!parcelId) {
@@ -50,12 +53,14 @@ export default function CustomerParcelDetails() {
     let mounted = true;
     setLoading(true);
     setError(null);
-    Promise.all([getCustomerParcel(parcelId), trackCustomerParcel(parcelId)])
-      .then(([details, track]) => {
+    Promise.all([getCustomerParcel(parcelId), trackCustomerParcel(parcelId), trackCustomerParcelCurrent(parcelId)])
+      .then(([details, track, current]) => {
         if (!mounted) return;
         setParcel(details as ParcelDetailsWithCoords);
         setRoutePoints(track.points ?? []);
-        setAgentLocation(null);
+        const pt = current.point;
+        if (pt && Number.isFinite(pt.latitude) && Number.isFinite(pt.longitude)) setAgentLocation([pt.latitude, pt.longitude]);
+        else setAgentLocation(null);
       })
       .catch((err: unknown) => {
         if (!mounted) return;
@@ -74,7 +79,41 @@ export default function CustomerParcelDetails() {
     };
   }, [parcelId]);
 
-  const mapRoute = useMemo<LatLngTuple[]>(() => {
+  useEffect(() => {
+    if (!parcelId || !token) return;
+    const client = createWsClient({
+      token,
+      onMessage: (msg) => {
+        if (msg.type !== "parcel_location") return;
+        const m = msg as any;
+        if (String(m.parcelId ?? "") !== parcelId) return;
+        const lat = Number(m.latitude);
+        const lng = Number(m.longitude);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+        const point: TrackingPoint = {
+          latitude: lat,
+          longitude: lng,
+          speedKph: Number.isFinite(Number(m.speedKph)) ? Number(m.speedKph) : 0,
+          heading: Number.isFinite(Number(m.heading)) ? Number(m.heading) : 0,
+          recordedAt: typeof m.recordedAt === "string" ? m.recordedAt : new Date().toISOString(),
+        };
+        setAgentLocation([lat, lng]);
+        setRoutePoints((prev) => {
+          const next = [...prev, point];
+          return next.length > 100 ? next.slice(next.length - 100) : next;
+        });
+      },
+    });
+    wsRef.current = client;
+    client.connect();
+    client.joinParcel(parcelId);
+    return () => {
+      client.close();
+      if (wsRef.current === client) wsRef.current = null;
+    };
+  }, [parcelId, token]);
+
+  const validRouteTuples = useMemo<LatLngTuple[]>(() => {
     const pts: LatLngTuple[] = [];
     for (const point of routePoints) {
       if (Number.isFinite(point.latitude) && Number.isFinite(point.longitude)) {
@@ -84,23 +123,26 @@ export default function CustomerParcelDetails() {
     return pts;
   }, [routePoints]);
 
-  const pickupPos = useMemo<LatLngTuple | null>(() => {
-    if (parcel?.pickupLat && parcel?.pickupLng) return [parcel.pickupLat, parcel.pickupLng];
-    return mapRoute.length ? mapRoute[0] : null;
-  }, [mapRoute, parcel?.pickupLat, parcel?.pickupLng]);
+  const pickupCoords = useMemo(() => {
+    const lat = parcel?.pickupLat;
+    const lng = parcel?.pickupLng;
+    if (typeof lat === "number" && typeof lng === "number" && Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
+    const first = validRouteTuples[0];
+    return first ? { lat: first[0], lng: first[1] } : null;
+  }, [parcel?.pickupLat, parcel?.pickupLng, validRouteTuples]);
 
-  const deliveryPos = useMemo<LatLngTuple | null>(() => {
-    if (parcel?.deliveryLat && parcel?.deliveryLng) return [parcel.deliveryLat, parcel.deliveryLng];
-    return mapRoute.length ? mapRoute[mapRoute.length - 1] : null;
-  }, [mapRoute, parcel?.deliveryLat, parcel?.deliveryLng]);
+  const deliveryCoords = useMemo(() => {
+    const lat = parcel?.deliveryLat;
+    const lng = parcel?.deliveryLng;
+    if (typeof lat === "number" && typeof lng === "number" && Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
+    const last = validRouteTuples[validRouteTuples.length - 1];
+    return last ? { lat: last[0], lng: last[1] } : null;
+  }, [parcel?.deliveryLat, parcel?.deliveryLng, validRouteTuples]);
 
-  const bounds = useMemo<LatLngBoundsExpression | undefined>(() => {
-    if (mapRoute.length >= 2) return mapRoute;
-    if (pickupPos && deliveryPos) return [pickupPos, deliveryPos];
-    return undefined;
-  }, [deliveryPos, mapRoute, pickupPos]);
-
-  const mapCenter = pickupPos ?? mapRoute[0] ?? DEFAULT_CENTER;
+  const agentCoords = useMemo(() => {
+    if (!agentLocation) return null;
+    return { lat: agentLocation[0], lng: agentLocation[1] };
+  }, [agentLocation]);
 
   const formatDateTime = (value?: string | null) => {
     if (!value) return "-";
@@ -109,14 +151,28 @@ export default function CustomerParcelDetails() {
     return d.toLocaleString();
   };
 
-  const refreshAgentLocation = () => {
-    if (mapRoute.length) {
-      setAgentLocation(mapRoute[mapRoute.length - 1]);
+  const formatLatLng = (lat?: number | null, lng?: number | null) => {
+    if (typeof lat !== "number" || typeof lng !== "number") return "-";
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return "-";
+    return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+  };
+
+  const refreshAgentLocation = async () => {
+    if (!parcelId) return;
+    try {
+      const res = await trackCustomerParcelCurrent(parcelId);
+      const pt = res.point;
+      if (pt && Number.isFinite(pt.latitude) && Number.isFinite(pt.longitude)) {
+        setAgentLocation([pt.latitude, pt.longitude]);
+        return;
+      }
+    } catch {
+    }
+    if (validRouteTuples.length) {
+      setAgentLocation(validRouteTuples[validRouteTuples.length - 1]);
       return;
     }
-    if (pickupPos) {
-      setAgentLocation(pickupPos);
-    }
+    if (pickupCoords) setAgentLocation([pickupCoords.lat, pickupCoords.lng]);
   };
 
   const renderStatusHistory = () => {
@@ -128,7 +184,7 @@ export default function CustomerParcelDetails() {
             <tr>
               <th className="px-4 py-2 text-left">Status</th>
               <th className="px-4 py-2 text-left">Remarks</th>
-              <th className="px-4 py-2 text-left">Customer</th>
+              <th className="px-4 py-2 text-left">Updated by</th>
               <th className="px-4 py-2 text-left">Date</th>
             </tr>
           </thead>
@@ -138,9 +194,9 @@ export default function CustomerParcelDetails() {
                 <td className="px-4 py-3">
                   <Badge className={statusTone(entry.status)}>{entry.status}</Badge>
                 </td>
-                <td className="px-4 py-3 text-sm text-muted-foreground">{entry.remarks ?? "—"}</td>
+                <td className="px-4 py-3 text-sm text-muted-foreground">{entry.remarks ?? "-"}</td>
                 <td className="px-4 py-3 text-sm text-muted-foreground">
-                  {entry.updatedBy.name} 
+                  {entry.updatedBy.name} - {entry.updatedBy.role} - {entry.updatedBy.id}
                 </td>
                 <td className="px-4 py-3 text-sm text-muted-foreground">{formatDateTime(entry.createdAt)}</td>
               </tr>
@@ -161,7 +217,7 @@ export default function CustomerParcelDetails() {
           </p>
         </div>
         <Link to="/customer/history" className="text-sm font-semibold text-primary underline-offset-2 hover:underline">
-          ← Back to history
+          - Back to history
         </Link>
       </div>
 
@@ -179,7 +235,7 @@ export default function CustomerParcelDetails() {
 
       {loading && (
         <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">Loading parcel details…</CardContent>
+          <CardContent className="py-10 text-center text-sm text-muted-foreground">Loading parcel details...</CardContent>
         </Card>
       )}
 
@@ -199,7 +255,7 @@ export default function CustomerParcelDetails() {
                 <Badge className={statusTone(parcel.paymentStatus)}>{parcel.paymentStatus}</Badge>
               </div>
               <p className="text-sm text-muted-foreground">
-                {parcel.pickupAddress} → {parcel.deliveryAddress}
+                {parcel.pickupAddress} - {parcel.deliveryAddress}
               </p>
             </CardHeader>
             <CardContent className="space-y-6 p-6">
@@ -208,18 +264,43 @@ export default function CustomerParcelDetails() {
                   <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Pickup</p>
                   <p className="text-sm font-semibold text-foreground">{formatDateTime(parcel.expectedPickupAt)}</p>
                   <p className="text-xs text-muted-foreground">{parcel.pickupAddress}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">Coords: {formatLatLng(parcel.pickupLat, parcel.pickupLng)}</p>
                 </div>
                 <div className="rounded-2xl border border-[hsl(var(--border))] bg-white p-4">
                   <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Delivery</p>
                   <p className="text-sm font-semibold text-foreground">{formatDateTime(parcel.expectedDeliveryAt)}</p>
                   <p className="text-xs text-muted-foreground">{parcel.deliveryAddress}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">Coords: {formatLatLng(parcel.deliveryLat, parcel.deliveryLng)}</p>
                 </div>
                 <div className="rounded-2xl border border-[hsl(var(--border))] bg-white p-4">
                   <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Payment</p>
                   <p className="text-sm font-semibold text-foreground">
-                    {parcel.paymentType} {parcel.paymentType === "COD" && parcel.codAmount ? `• BDT ${parcel.codAmount}` : ""}
+                    {parcel.paymentType} {parcel.paymentType === "COD" && parcel.codAmount ? `- BDT ${parcel.codAmount}` : ""}
                   </p>
                   <p className="text-xs text-muted-foreground">Status: {parcel.paymentStatus}</p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="rounded-2xl border border-[hsl(var(--border))] bg-white p-4">
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Metadata</p>
+                  <p className="text-sm font-semibold text-foreground">Reference: {parcel.referenceCode ?? "-"}</p>
+                  <p className="text-xs text-muted-foreground">Parcel ID: {parcel.id}</p>
+                  <p className="text-xs text-muted-foreground">Customer ID: {parcel.customerId}</p>
+                </div>
+                <div className="rounded-2xl border border-[hsl(var(--border))] bg-white p-4">
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Package</p>
+                  <p className="text-sm font-semibold text-foreground">
+                    {parcel.parcelType} - {parcel.parcelSize}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Weight: {parcel.weightKg ?? "-"} kg</p>
+                  <p className="text-xs text-muted-foreground">Instructions: {parcel.instructions ?? "-"}</p>
+                </div>
+                <div className="rounded-2xl border border-[hsl(var(--border))] bg-white p-4">
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Timeline</p>
+                  <p className="text-xs text-muted-foreground">Booked: {formatDateTime(parcel.createdAt)}</p>
+                  <p className="text-xs text-muted-foreground">Delivered: {formatDateTime(parcel.deliveredAt)}</p>
+                  <p className="text-xs text-muted-foreground">Failed: {formatDateTime(parcel.failedAt)}</p>
                 </div>
               </div>
 
@@ -230,9 +311,17 @@ export default function CustomerParcelDetails() {
                     {parcel.agentAssignment?.agent.name ?? "Not assigned"}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {parcel.agentAssignment?.agent.email ?? "---"} · {parcel.agentAssignment?.agent.phone ?? "N/A"}
+                    {parcel.agentAssignment?.agent.email ?? "---"} - {parcel.agentAssignment?.agent.phone ?? "N/A"}
                   </p>
+                  <p className="text-xs text-muted-foreground">Assigned: {formatDateTime(parcel.agentAssignment?.assignedAt)}</p>
                 </div>
+                {parcel.qrCodeUrl ? (
+                  <a href={parcel.qrCodeUrl} target="_blank" rel="noreferrer">
+                    <Button variant="secondary" size="sm">
+                      Open QR
+                    </Button>
+                  </a>
+                ) : null}
                 <Button variant="secondary" size="sm" onClick={refreshAgentLocation}>
                   Refresh agent location
                 </Button>
@@ -240,40 +329,28 @@ export default function CustomerParcelDetails() {
             </CardContent>
           </Card>
 
-          <div className="grid gap-5 lg:grid-cols-[1.1fr,0.9fr]">
+          <div className="grid gap-5 lg:grid-cols-[0.8fr,1.2fr]">
             <Card className="overflow-hidden">
               <CardHeader>
                 <CardTitle>Route map</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 <div className="h-[420px] w-full">
-                  <MapContainer center={mapCenter} bounds={bounds} zoom={12} className="h-full w-full">
-                    <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                    {mapRoute.length >= 2 && <Polyline positions={mapRoute} pathOptions={{ color: "#10b981", weight: 5 }} />}
-                    {pickupPos && (
-                      <Marker position={pickupPos}>
-                        <Popup>Pickup: {parcel.pickupAddress}</Popup>
-                      </Marker>
-                    )}
-                    {deliveryPos && (
-                      <Marker position={deliveryPos}>
-                        <Popup>Delivery: {parcel.deliveryAddress}</Popup>
-                      </Marker>
-                    )}
-                    {agentLocation && (
-                      <Marker position={agentLocation}>
-                        <Popup>Last agent ping</Popup>
-                      </Marker>
-                    )}
-                  </MapContainer>
+                  <ParcelTrackingMap
+                    className="h-full w-full"
+                    pickup={{ coords: pickupCoords, label: `Pickup: ${parcel.pickupAddress}` }}
+                    delivery={{ coords: deliveryCoords, label: `Delivery: ${parcel.deliveryAddress}` }}
+                    agent={{ coords: agentCoords, label: "Agent live location" }}
+                    routePoints={routePoints}
+                  />
                 </div>
                 <div className="space-y-1 px-6 py-4 text-sm text-muted-foreground">
                   <p>
-                    Route points: <span className="font-semibold text-foreground">{mapRoute.length}</span>
+                    Route points: <span className="font-semibold text-foreground">{validRouteTuples.length}</span>
                   </p>
                   <p>
                     Agent location:{" "}
-                    {agentLocation ? `${agentLocation[0].toFixed(4)}, ${agentLocation[1].toFixed(4)}` : "Tap refresh to fetch"}
+                    {agentLocation ? `${agentLocation[0].toFixed(4)}, ${agentLocation[1].toFixed(4)}` : "Waiting for live update"}
                   </p>
                 </div>
               </CardContent>

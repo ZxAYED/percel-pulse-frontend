@@ -12,8 +12,24 @@ export function getToastMessage(input: unknown): string | undefined {
     return msg ? msg : undefined;
   }
 
+  const responseData = (input as any)?.response?.data;
+  if (typeof responseData === "string") {
+    const msg = responseData.trim();
+    return msg ? msg : undefined;
+  }
+
   const maybeMessage =
-    (input as any)?.response?.data?.message ?? (input as any)?.data?.message ?? (input as any)?.message ?? undefined;
+    (input as any)?.response?.data?.message ??
+    (input as any)?.response?.data?.error ??
+    (input as any)?.response?.data?.detail ??
+    (input as any)?.response?.data?.title ??
+    (input as any)?.response?.data?.msg ??
+    (input as any)?.response?.data?.errors?.[0]?.message ??
+    (input as any)?.response?.data?.errors?.[0] ??
+    (input as any)?.data?.message ??
+    (input as any)?.data?.error ??
+    (input as any)?.message ??
+    undefined;
 
   if (typeof maybeMessage === "string") {
     const msg = maybeMessage.trim();

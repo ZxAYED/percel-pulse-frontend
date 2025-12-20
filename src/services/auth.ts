@@ -14,12 +14,16 @@ export type RegisterPayload = {
 };
 
 export async function loginUser(payload: LoginPayload) {
-  const res = await http.post<ApiResponse<{ user: User; accessToken: string }>>("/auth/login", payload);
+  const res = await http.post<ApiResponse<{ user: User; accessToken: string }>>("/auth/login", payload, {
+    cache: { invalidateTags: ["adminUsers", "users", "customerDashboardMetrics", "agentDashboardMetrics", "adminDashboardMetrics"] },
+  });
   return res.data.data;
 }
 
 export async function registerUser(payload: RegisterPayload) {
-  const res = await http.post<ApiResponse<{ user: User; otpSent: boolean; otpExpiresAt: string }>>("/auth/register", payload);
+  const res = await http.post<ApiResponse<{ user: User; otpSent: boolean; otpExpiresAt: string }>>("/auth/register", payload, {
+    cache: { invalidateTags: ["adminUsers", "users"] },
+  });
   return res.data.data;
 }
 

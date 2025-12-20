@@ -40,9 +40,17 @@ export type CustomerParcel = {
   trackingNumber: string;
   pickupAddress: string;
   deliveryAddress: string;
+  pickupLat?: number | null;
+  pickupLng?: number | null;
+  deliveryLat?: number | null;
+  deliveryLng?: number | null;
   parcelType: string;
   parcelSize: string;
   weightKg?: number | null;
+  referenceCode?: string | null;
+  instructions?: string | null;
+  qrCodeUrl?: string | null;
+  barcode?: string | null;
   paymentType: PaymentType;
   paymentStatus: PaymentStatus;
   codAmount?: number | null;
@@ -51,6 +59,7 @@ export type CustomerParcel = {
   expectedDeliveryAt?: string | null;
   deliveredAt?: string | null;
   failedAt?: string | null;
+  updatedAt?: string | null;
   createdAt: string;
 };
 
@@ -96,12 +105,83 @@ export type CustomerParcelsResponse<T> = {
   meta: CustomerParcelsMeta;
 };
 
+export type AgentParcelsMeta = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+};
+
+export type AgentParcelCustomer = {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string | null;
+};
+
+export type AgentParcel = CustomerParcel & {
+  customer?: AgentParcelCustomer | null;
+};
+
+export type AgentParcelsResponse<T> = {
+  data: T[];
+  meta: AgentParcelsMeta;
+};
+
 export type TrackingPoint = {
   latitude: number;
   longitude: number;
-  speedKph: number;
-  heading: number;
+  speedKph?: number | null;
+  heading?: number | null;
   recordedAt: string;
+};
+
+export type AgentActiveRouteMeta = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+};
+
+export type AgentActiveRouteSummary = {
+  count: number;
+  booked: number;
+  pickedUp: number;
+  inTransit: number;
+};
+
+export type AgentActiveRouteMarkerType = "pickup" | "delivery" | "current";
+
+export type AgentActiveRouteMarker = {
+  type: AgentActiveRouteMarkerType;
+  parcelId: string;
+  trackingNumber: string;
+  status: ParcelStatus;
+  latitude: number;
+  longitude: number;
+  recordedAt?: string;
+  speedKph?: number | null;
+  heading?: number | null;
+};
+
+export type AgentActiveRouteAssignment = {
+  id: string;
+  assignedAt: string;
+  acceptedAt?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+};
+
+export type AgentActiveRouteParcel = AgentParcel & {
+  agentAssignment?: AgentActiveRouteAssignment | null;
+  currentLocation?: (TrackingPoint & { parcelId: string }) | null;
+};
+
+export type AgentActiveRouteResponse = {
+  data: AgentActiveRouteParcel[];
+  meta: AgentActiveRouteMeta;
+  summary: AgentActiveRouteSummary;
+  markers: AgentActiveRouteMarker[];
 };
 
 export type AdminDashboardTotals = {
@@ -119,7 +199,7 @@ export type AdminDashboardTotals = {
   codAmount?: number;
   onRoad?: number;
   onRoadParcels?: number;
-  [key: string]: number | string | null | undefined;
+  [key: string]: unknown;
 };
 
 export type AdminDashboardMetrics = {

@@ -51,9 +51,19 @@ export default function Overview() {
   const totals: AdminDashboardTotals = metrics?.totals ?? {};
 
   const metricCards = useMemo(() => {
-    const getNumber = (...keys: string[]) => {
-      for (const key of keys) {
-        const value = totals[key];
+    const getByPath = (source: unknown, path: string) => {
+      const parts = path.split(".").map((p) => p.trim()).filter(Boolean);
+      let curr: unknown = source;
+      for (const part of parts) {
+        if (!curr || typeof curr !== "object") return undefined;
+        curr = (curr as Record<string, unknown>)[part];
+      }
+      return curr;
+    };
+
+    const getNumber = (...keysOrPaths: string[]) => {
+      for (const key of keysOrPaths) {
+        const value = key.includes(".") ? getByPath(totals, key) : totals[key];
         if (typeof value === "number" && Number.isFinite(value)) return value;
         if (typeof value === "string") {
           const parsed = Number(value);
@@ -193,11 +203,43 @@ export default function Overview() {
     );
   };
 
-  const totalsEntries = useMemo(() => {
-    const entries = Object.entries(totals)
-      .filter(([_, v]) => v !== undefined)
-      .sort(([a], [b]) => a.localeCompare(b));
-    return entries;
+  const coreTotals = useMemo(() => {
+    const getByPath = (source: unknown, path: string) => {
+      const parts = path.split(".").map((p) => p.trim()).filter(Boolean);
+      let curr: unknown = source;
+      for (const part of parts) {
+        if (!curr || typeof curr !== "object") return undefined;
+        curr = (curr as Record<string, unknown>)[part];
+      }
+      return curr;
+    };
+
+    const getNumber = (...keysOrPaths: string[]) => {
+      for (const key of keysOrPaths) {
+        const value = key.includes(".") ? getByPath(totals, key) : totals[key];
+        if (typeof value === "number" && Number.isFinite(value)) return value;
+        if (typeof value === "string") {
+          const parsed = Number(value);
+          if (Number.isFinite(parsed)) return parsed;
+        }
+      }
+      return null;
+    };
+
+    const count = (value: number | null) => (value === null ? "—" : new Intl.NumberFormat().format(value));
+    const money = (value: number | null) => (value === null ? "—" : `BDT ${new Intl.NumberFormat().format(value)}`);
+
+    const items = [
+      { label: "Total parcels", value: count(getNumber("parcels", "totalParcels", "counts.parcels", "totals.parcels")) },
+      { label: "Delivered", value: count(getNumber("delivered", "totalDelivered", "counts.delivered", "totals.delivered")) },
+      { label: "Failed", value: count(getNumber("failed", "totalFailed", "counts.failed", "totals.failed")) },
+      { label: "Users", value: count(getNumber("users", "totalUsers", "counts.users", "totals.users")) },
+      { label: "Customers", value: count(getNumber("customers", "totalCustomers", "counts.customers", "totals.customers")) },
+      { label: "Admins", value: count(getNumber("admins", "totalAdmins", "counts.admins", "totals.admins")) },
+      { label: "COD total", value: money(getNumber("codTotal", "codAmountTotal", "totalCodAmount", "totals.codAmount")) },
+    ];
+
+    return items.filter((x) => x.value !== "—");
   }, [totals]);
 
 
@@ -275,7 +317,7 @@ export default function Overview() {
           <CardHeader className="flex flex-col gap-2 border-b border-[hsl(var(--border))] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle className="text-xl font-semibold text-foreground">Totals</CardTitle>
-              <p className="text-sm text-muted-foreground">All totals returned by the backend.</p>
+              <p className="text-sm text-muted-foreground">Core totals from the backend.</p>
             </div>
             <Popover>
               <PopoverTrigger asChild>
@@ -291,15 +333,18 @@ export default function Overview() {
             </Popover>
           </CardHeader>
           <CardContent className="space-y-2 px-6 py-5">
-            {totalsEntries.length === 0 ? (
+            {coreTotals.length === 0 ? (
               <div className="rounded-2xl border border-[hsl(var(--border))] bg-secondary px-4 py-3 text-sm text-muted-foreground">
                 {metricsLoading ? "Loading…" : "No totals received."}
               </div>
             ) : (
-              totalsEntries.map(([k, v]) => (
-                <div key={k} className="flex items-center justify-between rounded-2xl border border-[hsl(var(--border))] bg-white px-4 py-3 text-sm shadow-sm">
-                  <div className="max-w-[60%] truncate text-muted-foreground">{k}</div>
-                  <div className="text-right font-semibold text-foreground">{v === null ? "null" : String(v)}</div>
+              coreTotals.map((item) => (
+                <div
+                  key={item.label}
+                  className="flex items-center justify-between rounded-2xl border border-[hsl(var(--border))] bg-white px-4 py-3 text-sm shadow-sm"
+                >
+                  <div className="max-w-[60%] truncate text-muted-foreground">{item.label}</div>
+                  <div className="text-right font-semibold text-foreground">{item.value}</div>
                 </div>
               ))
             )}

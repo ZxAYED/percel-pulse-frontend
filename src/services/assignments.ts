@@ -7,13 +7,17 @@ export async function assign(parcelId: string, agentId: string) {
 }
 
 export async function listAssignments() {
-  const res = await http.get<ApiResponse<Array<{ id: string; parcelId: string; agentId: string; status: string }>>>("/assignments");
+  const res = await http.get<ApiResponse<Array<{ id: string; parcelId: string; agentId: string; status: string }>>>("/assignments", {
+    cache: { tags: ["assignments"], ttlMs: 30_000 },
+  });
   return res.data.data;
 }
 
 export async function assignAgentAdmin(payload: { parcelId: string; agentId: string }) {
-  const res = await http.post<ApiResponse<AgentAssignment>>("/admin/assign-agent", payload);
-  return res.data.data;
+  const res = await http.post<ApiResponse<AgentAssignment>>("/admin/assign-agent", payload, {
+    cache: { invalidateTags: ["adminParcels", "adminAssignments", "adminDashboardMetrics", `customerParcel:${payload.parcelId}`] },
+  });
+  return res.data;
 }
 
 export type ListAdminAssignmentsQuery = {
@@ -28,6 +32,9 @@ export type ListAdminAssignmentsQuery = {
 };
 
 export async function listAdminAssignments(params?: ListAdminAssignmentsQuery) {
-  const res = await http.get<ApiResponse<AdminAssignmentsResponse>>("/admin/assignments", { params });
+  const res = await http.get<ApiResponse<AdminAssignmentsResponse>>("/admin/assignments", {
+    params,
+    cache: { tags: ["adminAssignments"], ttlMs: 30_000 },
+  });
   return res.data.data;
 }

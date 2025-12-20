@@ -1,4 +1,4 @@
-import { ArrowRight, Eye, EyeOff, Loader2, MapPin, ShieldCheck, TrendingUp } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, Info, Loader2, MapPin, ShieldCheck, TrendingUp } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
@@ -7,6 +7,7 @@ import { CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { MotionButton, MotionCard } from "../components/ui/motion";
+import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
 import { Select } from "../components/ui/select";
 import type { Role } from "../context/AuthContextBase";
 import { useAuth } from "../hooks/useAuth";
@@ -385,6 +386,48 @@ export default function Login() {
                       {isLoginPasswordVisible ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
                   </div>
+                </div>
+                <div className="flex justify-end">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <MotionButton type="button" variant="secondary" size="sm" className="gap-2 rounded-xl">
+                        <Info size={16} />  Credentials
+                      </MotionButton>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="w-80">
+                      <div className="space-y-3">
+                        <div className="space-y-1">
+                          <p className="text-sm font-semibold text-foreground">Login credentials</p>
+                          <p className="text-xs text-muted-foreground">Click a role to autofill the form.</p>
+                        </div>
+                        <div className="space-y-2">
+                          {[
+                            { role: "Admin", email: "8a1mx5591w@lnovic.com" },
+                            { role: "Agent", email: "sobana4187@roratu.com" },
+                            { role: "Customer", email: "retexe3994@naqulu.com" },
+                          ].map((item) => (
+                            <button
+                              key={item.role}
+                              type="button"
+                              onClick={() => {
+                                setLoginValue("email", item.email);
+                                setLoginValue("password", "123456");
+                              }}
+                              className="w-full rounded-2xl border border-[hsl(var(--border))] bg-secondary/60 px-4 py-3 text-left transition hover:bg-secondary"
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="text-sm font-semibold text-foreground">{item.role}</p>
+                                <span className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                                  123456
+                                </span>
+                              </div>
+                              <p className="mt-1 select-text text-sm text-muted-foreground">{item.email}</p>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <MotionButton type="submit" className="w-full gap-2 rounded-2xl" disabled={formState.isSubmitting}>
                   {formState.isSubmitting ? (

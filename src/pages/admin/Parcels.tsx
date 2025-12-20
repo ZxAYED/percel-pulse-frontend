@@ -256,8 +256,8 @@ export default function Parcels() {
                             if (!agentId) return;
                             setAssigningId(parcel.id);
                             assignAgentAdmin({ parcelId: parcel.id, agentId })
-                              .then(() => {
-                                toastSuccess("Agent assigned");
+                              .then((res) => {
+                                toastSuccess(res, "Agent assigned");
                                 void refreshParcels();
                               })
                               .catch((err) => {

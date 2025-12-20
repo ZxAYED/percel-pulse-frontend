@@ -87,8 +87,8 @@ export default function Assignments() {
                   const nextAgentId = agentId.trim();
                   setSubmitting(true);
                   assignAgentAdmin({ parcelId: nextParcelId, agentId: nextAgentId })
-                    .then(() => {
-                      toastSuccess("Agent assigned");
+                    .then((res) => {
+                      toastSuccess(res, "Agent assigned");
                     })
                     .catch((err) => {
                       toastError(err, "Failed to assign agent");

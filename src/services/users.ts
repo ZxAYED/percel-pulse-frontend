@@ -2,7 +2,7 @@ import { http } from "./http";
 import type { AdminUser, AdminUsersResponse, ApiResponse, Paginated, User } from "./types";
 
 export async function listUsers(params?: { page?: number; pageSize?: number; role?: User["role"] }) {
-  const res = await http.get<ApiResponse<Paginated<User>>>("/users", { params });
+  const res = await http.get<ApiResponse<Paginated<User>>>("/users", { params, cache: { tags: ["users"], ttlMs: 30_000 } });
   return res.data.data;
 }
 
@@ -31,6 +31,6 @@ export type ListAdminUsersQuery = {
 };
 
 export async function listAdminUsers(params?: ListAdminUsersQuery) {
-  const res = await http.get<ApiResponse<AdminUsersResponse<AdminUser>>>("/admin/users", { params });
+  const res = await http.get<ApiResponse<AdminUsersResponse<AdminUser>>>("/admin/users", { params, cache: { tags: ["adminUsers"], ttlMs: 30_000 } });
   return res.data.data;
 }

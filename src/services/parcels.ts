@@ -1,21 +1,24 @@
 import { http } from "./http";
 import type {
-  AdminParcel,
-  AdminParcelsResponse,
-  ApiResponse,
-  CustomerParcelDetails,
-  CustomerParcelListItem,
-  CustomerParcelsResponse,
-  Paginated,
-  Parcel,
-  ParcelStatus,
-  PaymentStatus,
-  PaymentType,
-  TrackingPoint,
+    AdminParcel,
+    AdminParcelsResponse,
+    AgentParcel,
+    AgentParcelsResponse,
+    ApiResponse,
+    CustomerParcelDetails,
+    CustomerParcelListItem,
+    CustomerParcelsResponse,
+    Paginated,
+    Parcel,
+    ParcelStatus,
+    PaymentStatus,
+    PaymentType,
+    AgentActiveRouteResponse,
+    TrackingPoint,
 } from "./types";
 
 export async function listParcels(params?: { page?: number; pageSize?: number; status?: Parcel["status"] }) {
-  const res = await http.get<ApiResponse<Paginated<Parcel>>>("/parcels", { params });
+  const res = await http.get<ApiResponse<Paginated<Parcel>>>("/parcels", { params, cache: { tags: ["parcels"], ttlMs: 30_000 } });
   return res.data.data;
 }
 
@@ -51,7 +54,7 @@ export type ListAdminParcelsQuery = {
 };
 
 export async function listAdminParcels(params?: ListAdminParcelsQuery) {
-  const res = await http.get<ApiResponse<AdminParcelsResponse<AdminParcel>>>("/admin/parcels", { params });
+  const res = await http.get<ApiResponse<AdminParcelsResponse<AdminParcel>>>("/admin/parcels", { params, cache: { tags: ["adminParcels"], ttlMs: 30_000 } });
   return res.data.data;
 }
 
@@ -64,7 +67,61 @@ export type UpdateAdminParcelStatusPayload = {
 export type UpdateAdminParcelStatusResponse = Pick<AdminParcel, "id" | "trackingNumber" | "status" | "deliveredAt" | "failedAt" | "updatedAt" | "customer">;
 
 export async function updateAdminParcelStatus(payload: UpdateAdminParcelStatusPayload) {
-  const res = await http.post<ApiResponse<UpdateAdminParcelStatusResponse>>("/admin/update-parcel-status", payload);
+  const res = await http.post<ApiResponse<UpdateAdminParcelStatusResponse>>("/admin/update-parcel-status", payload, {
+    cache: {
+      invalidateTags: ["adminParcels", "adminDashboardMetrics", `customerParcel:${payload.parcelId}`],
+    },
+  });
+  return res.data.data;
+}
+
+export type ListAgentParcelsQuery = {
+  page?: number;
+  limit?: number;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
+  searchTerm?: string;
+};
+
+export async function listAgentParcels(params?: ListAgentParcelsQuery) {
+  const res = await http.get<ApiResponse<AgentParcelsResponse<AgentParcel>>>("/agent/parcels", {
+    params,
+    cache: { tags: ["agentParcels"], ttlMs: 15_000 },
+  });
+  return res.data.data;
+}
+
+export type UpdateAgentParcelStatusPayload = {
+  parcelId: string;
+  status: "PICKED_UP" | "IN_TRANSIT" | "DELIVERED" | "FAILED";
+  remarks?: string;
+};
+
+export type UpdateAgentParcelStatusResponse = Pick<AgentParcel, "id" | "trackingNumber" | "status" | "deliveredAt" | "failedAt" | "updatedAt">;
+
+export async function updateAgentParcelStatus(payload: UpdateAgentParcelStatusPayload) {
+  const res = await http.post<ApiResponse<UpdateAgentParcelStatusResponse>>("/agent/update-parcel-status", payload, {
+    cache: {
+      invalidateTags: ["agentParcels", "agentDashboardMetrics", `customerParcel:${payload.parcelId}`],
+    },
+  });
+  return res.data.data;
+}
+
+export type PostAgentLocationPayload = {
+  parcelId: string;
+  latitude: number;
+  longitude: number;
+  speedKph?: number;
+  heading?: number;
+};
+
+export async function postAgentLocation(payload: PostAgentLocationPayload) {
+  const res = await http.post<ApiResponse<TrackingPoint>>("/agent/location", payload, {
+    cache: {
+      invalidateTags: [`customerParcelTrack:${payload.parcelId}`, `customerParcelTrackCurrent:${payload.parcelId}`],
+    },
+  });
   return res.data.data;
 }
 
@@ -127,16 +184,38 @@ export type ListCustomerParcelsQuery = {
 };
 
 export async function listCustomerParcels(params?: ListCustomerParcelsQuery) {
-  const res = await http.get<ApiResponse<CustomerParcelsResponse<CustomerParcelListItem>>>("/customer/parcels", { params });
+  const res = await http.get<ApiResponse<CustomerParcelsResponse<CustomerParcelListItem>>>("/customer/parcels", {
+    params,
+    cache: { tags: ["customerParcels"], ttlMs: 30_000 },
+  });
   return res.data.data;
 }
 
 export async function getCustomerParcel(id: string) {
-  const res = await http.get<ApiResponse<CustomerParcelDetails>>(`/customer/parcels/${id}`);
+  const res = await http.get<ApiResponse<CustomerParcelDetails>>(`/customer/parcels/${id}`, {
+    cache: { tags: [`customerParcel:${id}`], ttlMs: 30_000 },
+  });
   return res.data.data;
 }
 
 export async function trackCustomerParcel(id: string) {
-  const res = await http.get<ApiResponse<{ points: TrackingPoint[] }>>(`/customer/parcels/${id}/track`);
+  const res = await http.get<ApiResponse<{ points: TrackingPoint[] }>>(`/customer/parcels/${id}/track`, {
+    cache: { tags: [`customerParcelTrack:${id}`], ttlMs: 5_000 },
+  });
+  return res.data.data;
+}
+
+export async function trackCustomerParcelCurrent(id: string) {
+  const res = await http.get<ApiResponse<{ point: TrackingPoint | null }>>(`/customer/parcels/${id}/track/current`, {
+    cache: { tags: [`customerParcelTrackCurrent:${id}`], ttlMs: 2_000 },
+  });
+  return res.data.data;
+}
+
+export async function getAgentActiveRoute(params?: { page?: number; limit?: number }) {
+  const res = await http.get<ApiResponse<AgentActiveRouteResponse>>("/agent/parcels/active", {
+    params,
+    cache: { tags: ["agentActiveRoute"], ttlMs: 5_000 },
+  });
   return res.data.data;
 }
