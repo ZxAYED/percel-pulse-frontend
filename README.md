@@ -1,4 +1,4 @@
-# 🚚 **ParcelPulse Frontend (Courier Portal)**
+# ParcelPulse Frontend (Courier Portal)
 
 [![Vite](https://img.shields.io/badge/Vite-7-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=0B1F2A)](https://react.dev/)
@@ -6,116 +6,108 @@
 [![Tailwind CSS](https://img.shields.io/badge/TailwindCSS-3-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 [![Netlify](https://img.shields.io/badge/Deployed%20on-Netlify-00C7B7?logo=netlify&logoColor=white)](https://www.netlify.com/)
 
-🔗 **Production UI**: [ParcelPulse Service](https://parcel-pulse-service.netlify.app/)
+Production UI: https://parcel-pulse-service.netlify.app/
 
----
+## About
 
-## 🚀 **About ParcelPulse**
+ParcelPulse is a role-based courier portal frontend with three workspaces:
+- Admin: operations overview, users, parcels, assignments, reports
+- Agent: assigned tasks, status updates, live location sharing, route map
+- Customer: booking, parcel history, parcel details, live tracking
 
-ParcelPulse is a **role-based courier portal** designed for efficient parcel management across three user roles:
-- **Admin**: Overview of operations, user management, parcels, assignments, and reports.
-- **Agent**: View assigned tasks, update statuses, share live locations, and view routes.
-- **Customer**: Book parcels, view history, check parcel details, and live tracking.
+It integrates with a REST API for data and a WebSocket channel for realtime parcel location updates.
 
-Integrates with a **REST API** for data and a **WebSocket channel** for real-time parcel location updates.
+## Key Features
 
----
+- Role-based authentication and routing (`ADMIN`, `AGENT`, `CUSTOMER`)
+- Admin dashboards and management screens (parcels, users, assignments, reports)
+- Agent task list with status updates and live location updates (REST + WebSocket)
+- Customer parcel details with live tracking map updates
+- Map UI built with Leaflet (markers + polylines)
+- Typed API layer with lightweight client-side caching and invalidation
+- Responsive “glass UI” components and toast notifications
 
-## ✨ **Key Features**
+## Tech Stack
 
-- **Role-Based Authentication**: Separate dashboards for Admin, Agent, and Customer.
-- **Admin Dashboards**: Manage parcels, users, assignments, and generate reports.
-- **Agent Dashboard**: Manage tasks, update statuses, and share live locations via WebSocket.
-- **Customer Dashboard**: View live parcel tracking and parcel details with maps.
-- **Interactive Maps**: **Leaflet** integration for live tracking and route display.
-- **Typed API**: Type-safe API interactions with caching and invalidation for performance.
-- **Responsive UI**: Designed with **TailwindCSS** for a modern "glass UI" effect.
-- **Toast Notifications**: Real-time notifications on UI events.
+- React 19 + TypeScript
+- Vite 7
+- Tailwind CSS
+- Axios (REST client)
+- WebSocket (realtime)
+- Leaflet + React Leaflet (maps)
+- react-hook-form (forms)
+- i18next (EN/BN labels)
 
----
+## Project Structure
 
-## 🛠️ **Tech Stack**
-
-- **Frontend**: React 19 + TypeScript
-- **Build Tool**: Vite 7
-- **UI Framework**: Tailwind CSS
-- **HTTP Client**: Axios (for REST API)
-- **Realtime**: WebSocket
-- **Map Integration**: Leaflet + React Leaflet
-- **Forms**: react-hook-form
-- **Localization**: i18next (EN/BN support)
-
----
-
-## 📂 **Project Structure**
-
-```plaintext
+```text
 src/
-  pages/              # Route-level screens (admin/agent/customer)
-  routes/             # React Router configuration & guards
-  services/           # REST & WebSocket clients, API types
-  components/         # UI components and maps
-  context/            # Auth context & role state management
-  lib/                # Utilities (toasts, icons, navigation)
+  pages/              Route-level screens (admin/agent/customer)
+  routes/             React Router configuration and guards
+  services/           REST + WebSocket clients + API types
+  components/         UI components and maps
+  context/            Auth context and role state
+  lib/                Utilities (toasts, icons, navigation)
 public/
-  _redirects          # SPA fallback for Netlify
-  
+  _redirects           SPA fallback for Netlify
+```
 
-  🏃‍♂️ Getting Started Locally
-Prerequisites
+## Getting Started (Local)
 
-Node.js 18+ (recommended: Node 20/22)
+### Prerequisites
 
-Install & Run
+- Node.js 18+ (recommended: Node 20/22)
+
+### Install & Run
+
+```bash
 npm install
 npm run dev
+```
 
-Environment Variables
+### Environment Variables
 
-Create a .env file by copying .env.example and update with your local or production URLs:
+Copy `.env.example` → `.env` and update values:
 
-Variable	Purpose	Example
-VITE_BACKEND_API_URL	REST API base URL	http://localhost:5000/api
-VITE_BACKEND_WS_URL	WebSocket base URL	ws://localhost:5000/ws
+| Variable | Purpose | Example |
+|---|---|---|
+| `VITE_BACKEND_API_URL` | REST API base URL | `http://localhost:5000/api` |
+| `VITE_BACKEND_WS_URL` | WebSocket base URL | `ws://localhost:5000/ws` |
 
-For production, use these values:
+For a backend hosted on Render at `https://percel-pulse-backend.onrender.com`, use:
+- `VITE_BACKEND_API_URL=https://percel-pulse-backend.onrender.com/api`
+- `VITE_BACKEND_WS_URL=wss://percel-pulse-backend.onrender.com/ws`
 
-VITE_BACKEND_API_URL=https://percel-pulse-backend.onrender.com/api
-VITE_BACKEND_WS_URL=wss://percel-pulse-backend.onrender.com/ws
+## Scripts
 
-🔧 Scripts
+- `npm run dev` - start Vite dev server
+- `npm run build` - production build to `dist/`
+- `npm run preview` - preview production build locally
+- `npm run lint` - run ESLint
+- `npm run typecheck` - run TypeScript typecheck
 
-Development: npm run dev — Start Vite development server
+## Deployment
 
-Build: npm run build — Create a production build
+### Netlify (Static)
 
-Preview: npm run preview — Preview production build locally
+- Build command: `npm run build`
+- Publish directory: `dist`
 
-Lint: npm run lint — Run ESLint
-
-Typecheck: npm run typecheck — Run TypeScript type check
-
-🌐 Deployment
-Netlify (Static)
-
-Build Command: npm run build
-
-Publish Directory: dist
-
-SPA Routing (via public/_redirects):
-
+SPA routing is handled via `public/_redirects`:
+```text
 /*    /index.html   200
+```
 
-Render
+### Render
 
-Deploying on Render (Static Site):
+If deploying on Render, use a **Static Site**:
+- Build command: `npm install && npm run build`
+- Publish directory: `dist`
+- Rewrite rule: `/*` → `/index.html` (200)
 
-Build Command: npm install && npm run build
+If you created a **Web Service** by mistake, do not use `node index.js` (this project has no server entry file). Use either a Static Site or `npm run preview -- --host 0.0.0.0 --port $PORT`.
 
-Publish Directory: dist
+## Notes
 
-Rewrite Rule: /* → /index.html (200)
-
-For Web Service, use npm run preview:
-
-npm run preview -- --host 0.0.0.0 --port $PORT
+- Auth token is stored in `localStorage` and attached as `Authorization` for API requests.
+- WebSocket connects to `/ws` and authenticates by sending `{ "type": "auth", "token": "<accessToken>" }`.
