@@ -1,10 +1,15 @@
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { MapContainer, Marker, Polyline, Popup, TileLayer } from "react-leaflet";
+import { useEffect, useMemo, useState } from "react";
+import { Button } from "../../components/ui/button";
 import { CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { MotionCard } from "../../components/ui/motion";
+import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
+import { Select } from "../../components/ui/select";
 import { PageTitle } from "../../components/ui/title";
-import { adminAssignments, adminMetrics } from "../../data/admin";
+import { toastError } from "../../lib/utils";
+import { adminDashboardMetrics } from "../../services/reports";
+import type { AdminDashboardMetrics, AdminDashboardTotals } from "../../services/types";
 
 const defaultCenter: [number, number] = [23.8103, 90.4125];
 const markerIcon = new L.Icon({
@@ -17,19 +22,228 @@ const markerIcon = new L.Icon({
 });
 
 export default function Overview() {
-  const events = [
-    { title: "35 parcels dispatched", time: "12:24 PM", badge: "In transit" },
-    { title: "Route updated for Gulshan", time: "12:02 PM", badge: "Optimized" },
-    { title: "5 COD settled", time: "11:40 AM", badge: "Finance" },
-    { title: "2 delays flagged", time: "11:05 AM", badge: "Risk" },
-  ];
+  const [metrics, setMetrics] = useState<AdminDashboardMetrics | null>(null);
+  const [metricsLoading, setMetricsLoading] = useState(true);
+  const [windowSize, setWindowSize] = useState<7 | 14 | 30>(14);
 
-  const lifecycle = [
-    { label: "Picked up", value: 32, percent: 42, tone: "from-cyan-300 to-blue-400" },
-    { label: "In transit", value: 86, percent: 68, tone: "from-primary to-emerald-300" },
-    { label: "Delivered", value: 1_152, percent: 92, tone: "from-emerald-300 to-emerald-500" },
-    { label: "Failed", value: 12, percent: 8, tone: "from-amber-300 to-amber-500" },
-  ];
+  useEffect(() => {
+    let mounted = true;
+    setMetricsLoading(true);
+    adminDashboardMetrics()
+      .then((data) => {
+        if (!mounted) return;
+        setMetrics(data);
+      })
+      .catch((err) => {
+        if (!mounted) return;
+        toastError(err, "Failed to load admin dashboard metrics");
+        setMetrics(null);
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setMetricsLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const totals: AdminDashboardTotals = metrics?.totals ?? {};
+
+  const metricCards = useMemo(() => {
+    const getByPath = (source: unknown, path: string) => {
+      const parts = path.split(".").map((p) => p.trim()).filter(Boolean);
+      let curr: unknown = source;
+      for (const part of parts) {
+        if (!curr || typeof curr !== "object") return undefined;
+        curr = (curr as Record<string, unknown>)[part];
+      }
+      return curr;
+    };
+
+    const getNumber = (...keysOrPaths: string[]) => {
+      for (const key of keysOrPaths) {
+        const value = key.includes(".") ? getByPath(totals, key) : totals[key];
+        if (typeof value === "number" && Number.isFinite(value)) return value;
+        if (typeof value === "string") {
+          const parsed = Number(value);
+          if (Number.isFinite(parsed)) return parsed;
+        }
+      }
+      return null;
+    };
+
+    const bookingsToday = getNumber("bookingsToday", "bookings", "todayBookings", "totalBookingsToday");
+    const failed = getNumber("failedDeliveries", "failed", "todayFailed", "totalFailedToday");
+    const cod = getNumber("codAmount", "cod", "todayCod", "totalCodToday");
+    const onRoad = getNumber("onRoadParcels", "onRoad", "onRoadCount", "activeParcels");
+
+    const formatCount = (value: number | null) => (value === null ? "—" : new Intl.NumberFormat().format(value));
+    const formatCurrency = (value: number | null) => (value === null ? "—" : `BDT ${new Intl.NumberFormat().format(value)}`);
+
+    return [
+      { label: "Bookings today", value: formatCount(bookingsToday) },
+      { label: "Failed deliveries", value: formatCount(failed) },
+      { label: "COD amount", value: formatCurrency(cod) },
+      { label: "On-road parcels", value: formatCount(onRoad) },
+    ].map((item) => ({
+      ...item,
+      helper: metricsLoading ? "Loading…" : "Updated just now",
+    }));
+  }, [metricsLoading, totals]);
+
+  type TrendPoint = { label: string; value: number };
+  const normalizeSeries = (input: unknown, preferredValueKeys: string[]): TrendPoint[] => {
+    if (input && typeof input === "object" && !Array.isArray(input)) {
+      const entries = Object.entries(input as Record<string, unknown>)
+        .map(([label, value]) => ({ label, value: Number(value) }))
+        .filter((x) => Number.isFinite(x.value))
+        .sort((a, b) => a.label.localeCompare(b.label));
+      return entries;
+    }
+    if (!Array.isArray(input)) return [];
+    const labelKeys = ["date", "day", "label", "x", "_id", "name"];
+    const valueKeys = [...preferredValueKeys, "value", "count", "total", "amount", "sum"];
+
+    const points: TrendPoint[] = [];
+    for (let i = 0; i < input.length; i++) {
+      const row = input[i] as unknown;
+      if (typeof row === "number") {
+        points.push({ label: String(i + 1), value: row });
+        continue;
+      }
+      if (Array.isArray(row)) {
+        const label = row[0] != null ? String(row[0]) : String(i + 1);
+        const v = row[1];
+        const value = typeof v === "number" ? v : Number(v);
+        if (Number.isFinite(value)) points.push({ label, value });
+        continue;
+      }
+      if (row && typeof row === "object") {
+        const obj = row as Record<string, unknown>;
+        const labelKey = labelKeys.find((k) => obj[k] !== undefined && obj[k] !== null);
+        const label = labelKey ? String(obj[labelKey]) : String(i + 1);
+        let value: number | null = null;
+        for (const k of valueKeys) {
+          const v = obj[k];
+          if (typeof v === "number" && Number.isFinite(v)) {
+            value = v;
+            break;
+          }
+          if (typeof v === "string") {
+            const parsed = Number(v);
+            if (Number.isFinite(parsed)) {
+              value = parsed;
+              break;
+            }
+          }
+        }
+        if (value === null) {
+          for (const v of Object.values(obj)) {
+            if (typeof v === "number" && Number.isFinite(v)) {
+              value = v;
+              break;
+            }
+            if (typeof v === "string") {
+              const parsed = Number(v);
+              if (Number.isFinite(parsed)) {
+                value = parsed;
+                break;
+              }
+            }
+          }
+        }
+        if (value !== null) points.push({ label, value });
+      }
+    }
+    return points;
+  };
+
+  const bookingsTrend = useMemo(() => {
+    const pts = normalizeSeries(metrics?.bookingsByDay ?? {}, ["bookings", "booking", "bookingsCount"]);
+    return pts.slice(-windowSize);
+  }, [metrics?.bookingsByDay, windowSize]);
+
+  const failedTrend = useMemo(() => {
+    const pts = normalizeSeries(metrics?.failedByDay ?? {}, ["failed", "failedDeliveries", "failedCount"]);
+    return pts.slice(-windowSize);
+  }, [metrics?.failedByDay, windowSize]);
+
+  const codTrend = useMemo(() => {
+    const pts = normalizeSeries(metrics?.codByDay ?? {}, ["cod", "codAmount", "amount"]);
+    return pts.slice(-windowSize);
+  }, [metrics?.codByDay, windowSize]);
+
+  const renderTrend = (points: TrendPoint[], format: "count" | "currency") => {
+    const max = points.reduce((acc, p) => Math.max(acc, p.value), 0) || 1;
+    const fmt = new Intl.NumberFormat();
+    return (
+      <div className="space-y-2">
+        {points.length === 0 ? (
+          <div className="rounded-2xl border border-[hsl(var(--border))] bg-secondary px-4 py-3 text-sm text-muted-foreground">
+            {metricsLoading ? "Loading…" : "No trend data."}
+          </div>
+        ) : (
+          points.map((p) => (
+            <div key={p.label} className="grid grid-cols-[110px,1fr,120px] items-center gap-3 text-sm">
+              <div className="truncate text-muted-foreground">{p.label}</div>
+              <div className="h-2 overflow-hidden rounded-full bg-secondary">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-primary to-emerald-300"
+                  style={{ width: `${Math.max(3, Math.round((p.value / max) * 100))}%` }}
+                />
+              </div>
+              <div className="text-right font-semibold text-foreground">
+                {format === "currency" ? `BDT ${fmt.format(p.value)}` : fmt.format(p.value)}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    );
+  };
+
+  const coreTotals = useMemo(() => {
+    const getByPath = (source: unknown, path: string) => {
+      const parts = path.split(".").map((p) => p.trim()).filter(Boolean);
+      let curr: unknown = source;
+      for (const part of parts) {
+        if (!curr || typeof curr !== "object") return undefined;
+        curr = (curr as Record<string, unknown>)[part];
+      }
+      return curr;
+    };
+
+    const getNumber = (...keysOrPaths: string[]) => {
+      for (const key of keysOrPaths) {
+        const value = key.includes(".") ? getByPath(totals, key) : totals[key];
+        if (typeof value === "number" && Number.isFinite(value)) return value;
+        if (typeof value === "string") {
+          const parsed = Number(value);
+          if (Number.isFinite(parsed)) return parsed;
+        }
+      }
+      return null;
+    };
+
+    const count = (value: number | null) => (value === null ? "—" : new Intl.NumberFormat().format(value));
+    const money = (value: number | null) => (value === null ? "—" : `BDT ${new Intl.NumberFormat().format(value)}`);
+
+    const items = [
+      { label: "Total parcels", value: count(getNumber("parcels", "totalParcels", "counts.parcels", "totals.parcels")) },
+      { label: "Delivered", value: count(getNumber("delivered", "totalDelivered", "counts.delivered", "totals.delivered")) },
+      { label: "Failed", value: count(getNumber("failed", "totalFailed", "counts.failed", "totals.failed")) },
+      { label: "Users", value: count(getNumber("users", "totalUsers", "counts.users", "totals.users")) },
+      { label: "Customers", value: count(getNumber("customers", "totalCustomers", "counts.customers", "totals.customers")) },
+      { label: "Admins", value: count(getNumber("admins", "totalAdmins", "counts.admins", "totals.admins")) },
+      { label: "COD total", value: money(getNumber("codTotal", "codAmountTotal", "totalCodAmount", "totals.codAmount")) },
+    ];
+
+    return items.filter((x) => x.value !== "—");
+  }, [totals]);
+
+
+
 
   return (
     <div className="space-y-8">
@@ -48,7 +262,7 @@ export default function Overview() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {adminMetrics.map((item) => (
+        {metricCards.map((item) => (
           <MotionCard key={item.label}>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm uppercase tracking-[0.12em] text-muted-foreground">{item.label}</CardTitle>
@@ -65,6 +279,80 @@ export default function Overview() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1.4fr,1fr]">
+        <MotionCard className="p-0">
+          <CardHeader className="flex flex-col gap-3 border-b border-[hsl(var(--border))] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="text-xl font-semibold text-foreground">Trends</CardTitle>
+              <p className="text-sm text-muted-foreground">Bookings, failed deliveries, and COD over time.</p>
+            </div>
+            <div className="w-44">
+              <Select
+                value={String(windowSize)}
+                onChange={(v) => setWindowSize(Number(v) as 7 | 14 | 30)}
+                options={[
+                  { label: "Last 7 days", value: "7" },
+                  { label: "Last 14 days", value: "14" },
+                  { label: "Last 30 days", value: "30" },
+                ]}
+              />
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-4 px-6 py-5 md:grid-cols-3">
+            <div className="space-y-2">
+              <div className="text-sm font-semibold text-foreground">Bookings</div>
+              {renderTrend(bookingsTrend, "count")}
+            </div>
+            <div className="space-y-2">
+              <div className="text-sm font-semibold text-foreground">Failed</div>
+              {renderTrend(failedTrend, "count")}
+            </div>
+            <div className="space-y-2">
+              <div className="text-sm font-semibold text-foreground">COD</div>
+              {renderTrend(codTrend, "currency")}
+            </div>
+          </CardContent>
+        </MotionCard>
+
+        <MotionCard className="p-0">
+          <CardHeader className="flex flex-col gap-2 border-b border-[hsl(var(--border))] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="text-xl font-semibold text-foreground">Totals</CardTitle>
+              <p className="text-sm text-muted-foreground">Core totals from the backend.</p>
+            </div>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="secondary" size="sm">
+                  View raw
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-[420px]">
+                <pre className="max-h-[320px] overflow-auto whitespace-pre-wrap break-words text-xs text-foreground">
+                  {JSON.stringify(totals, null, 2)}
+                </pre>
+              </PopoverContent>
+            </Popover>
+          </CardHeader>
+          <CardContent className="space-y-2 px-6 py-5">
+            {coreTotals.length === 0 ? (
+              <div className="rounded-2xl border border-[hsl(var(--border))] bg-secondary px-4 py-3 text-sm text-muted-foreground">
+                {metricsLoading ? "Loading…" : "No totals received."}
+              </div>
+            ) : (
+              coreTotals.map((item) => (
+                <div
+                  key={item.label}
+                  className="flex items-center justify-between rounded-2xl border border-[hsl(var(--border))] bg-white px-4 py-3 text-sm shadow-sm"
+                >
+                  <div className="max-w-[60%] truncate text-muted-foreground">{item.label}</div>
+                  <div className="text-right font-semibold text-foreground">{item.value}</div>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </MotionCard>
+      </div>
+
+      {/* <div className="grid gap-4 lg:grid-cols-[1.4fr,1fr]">
         <MotionCard className="p-0">
           <CardHeader className="flex flex-col gap-2 border-b border-[hsl(var(--border))] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -108,9 +396,9 @@ export default function Overview() {
             ))}
           </CardContent>
         </MotionCard>
-      </div>
+      </div> */}
 
-      <div className="grid gap-4 lg:grid-cols-[1.3fr,1fr]">
+      {/* <div className="grid gap-4 lg:grid-cols-[1.3fr,1fr]">
         <MotionCard>
           <CardHeader>
             <CardTitle>Parcel lifecycle</CardTitle>
@@ -151,8 +439,8 @@ export default function Overview() {
             ))}
           </CardContent>
         </MotionCard>
-      </div>
-
+      </div> */}
+{/* 
       <div className="grid gap-4 lg:grid-cols-[1.2fr,1fr]">
         <MotionCard>
           <CardHeader>
@@ -195,7 +483,7 @@ export default function Overview() {
             ))}
           </CardContent>
         </MotionCard>
-      </div>
+      </div> */}
     </div>
   );
 }

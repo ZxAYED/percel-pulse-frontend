@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from "react";
-import { AuthContext, type AuthContextValue, type AuthUser, type Role } from "./AuthContextBase";
+import React, { useEffect, useMemo, useState } from "react";
+import { AuthContext, type AuthContextValue, type AuthUser } from "./AuthContextBase";
+import { clearAuthToken, setAuthToken } from "../services/http";
 
 type AuthState = {
   token: string | null;
@@ -19,6 +20,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   });
 
+  useEffect(() => {
+    setAuthToken(state.token);
+  }, [state.token]);
+
   const value = useMemo<AuthContextValue>(() => ({
     token: state.token,
     user: state.user,
@@ -27,11 +32,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     login: ({ token, user }) => {
       localStorage.setItem(TOKEN_KEY, token);
       localStorage.setItem(USER_KEY, JSON.stringify(user));
+      setAuthToken(token);
       setState({ token, user });
     },
     logout: () => {
       localStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem(USER_KEY);
+      clearAuthToken();
       setState({ token: null, user: null });
     },
     setUser: (user) => {

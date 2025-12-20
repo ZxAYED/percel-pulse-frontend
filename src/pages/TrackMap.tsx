@@ -1,14 +1,18 @@
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { MapPin, RefreshCw, Save, Shuffle } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { MapContainer, Marker, Polyline, Popup, TileLayer } from "react-leaflet";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { MotionCard } from "../components/ui/motion";
 import { PageTitle, SectionTitle } from "../components/ui/title";
 import { useAuth } from "../hooks/useAuth";
-import { adminRoutePlan, agentRoutePlan, customerRoutePlan, type LatLngTuple } from "../data/routes";
+import { toastError } from "../lib/utils";
+import { getAgentActiveRoute } from "../services/parcels";
+import type { AgentActiveRouteMarker, AgentActiveRouteResponse, ParcelStatus } from "../services/types";
+
+type LatLngTuple = [number, number];
 
 const markerIcon = new L.Icon({
   iconUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png",
@@ -21,131 +25,155 @@ const markerIcon = new L.Icon({
 
 export default function TrackMap() {
   const { role } = useAuth();
-  const [startId, setStartId] = useState(agentRoutePlan.startOptions[0].id);
-  const routePlan = useMemo(() => {
-    if (role === "agent") return agentRoutePlan;
-    if (role === "customer") return customerRoutePlan;
-    return adminRoutePlan;
-  }, [role]);
+  const [data, setData] = useState<AgentActiveRouteResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const resolvedStart: LatLngTuple = useMemo(() => {
-    if ("start" in routePlan) return routePlan.start;
-    const found = routePlan.startOptions.find((opt) => opt.id === startId) || routePlan.startOptions[0];
-    return found.coords;
-  }, [routePlan, startId]);
-
-  const [center, setCenter] = useState<LatLngTuple>(resolvedStart);
-  const [route, setRoute] = useState<LatLngTuple[]>([resolvedStart, ...("waypoints" in routePlan ? routePlan.waypoints : [])]);
-  const [customerPickup, setCustomerPickup] = useState("");
-  const [customerDelivery, setCustomerDelivery] = useState("");
-
-  useEffect(() => {
-    const stops = "waypoints" in routePlan ? routePlan.waypoints : [];
-    setCenter(resolvedStart);
-    setRoute([resolvedStart, ...stops]);
-  }, [resolvedStart, routePlan]);
+  const load = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    getAgentActiveRoute({ page: 1, limit: 100 })
+      .then((res) => {
+        setData(res);
+      })
+      .catch((err: unknown) => {
+        setData(null);
+        setError("Failed to load active route.");
+        toastError(err, "Failed to load active route");
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, []);
 
   useEffect(() => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const coords: LatLngTuple = [pos.coords.latitude, pos.coords.longitude];
-        if (role === "agent") return; // keep fixed depot unless rider changes it
-        setCenter(coords);
-      },
-      () => {}
-    );
-  }, [role]);
-
-  const saveAgentRoute = () => {
-    if (role !== "agent") return;
-    const startLabel = "startOptions" in routePlan ? routePlan.startOptions.find((s) => s.id === startId)?.label : "Start";
-    console.log("Agent route saved", { start: startLabel, coordinates: route });
-    alert("Agent route saved (check console)");
-  };
-
-  const submitCustomerLocation = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (role === "customer") {
-      console.log("Customer shared location", { pickup: customerPickup, delivery: customerDelivery });
-      alert("Location shared (check console)");
+    if (role !== "AGENT") {
+      setLoading(false);
+      setData(null);
+      setError(null);
+      return;
     }
-  };
+    load();
+  }, [load, role]);
 
-  const title = role === "agent" ? "Agent delivery route" : role === "customer" ? "Customer route" : "Operations route";
-  const subtitle =
-    role === "agent"
-      ? "Fixed depot start; rider can pick a hub and follow optimized stops. (Leaflet preview without Google Directions)"
-      : role === "customer"
-        ? "Share your pickup/delivery path; agents use this to plan handoff. (Leaflet preview without Google Directions)"
-        : "Live operational route overview. (Leaflet preview without Google Directions)";
+  const markers = data?.markers ?? [];
+  const parcels = data?.data ?? [];
+  const summary = data?.summary;
+
+  const markerByParcel = useMemo(() => {
+    const by = new Map<string, { pickup?: AgentActiveRouteMarker; delivery?: AgentActiveRouteMarker; current?: AgentActiveRouteMarker }>();
+    for (const m of markers) {
+      const existing = by.get(m.parcelId) ?? {};
+      if (m.type === "pickup") existing.pickup = m;
+      if (m.type === "delivery") existing.delivery = m;
+      if (m.type === "current") existing.current = m;
+      by.set(m.parcelId, existing);
+    }
+    return by;
+  }, [markers]);
+
+  const polylines = useMemo(() => {
+    const lines: Array<{ parcelId: string; trackingNumber: string; status: ParcelStatus; points: LatLngTuple[] }> = [];
+    for (const p of parcels) {
+      const m = markerByParcel.get(p.id);
+      const points: LatLngTuple[] = [];
+      const push = (x: AgentActiveRouteMarker | undefined) => {
+        if (!x) return;
+        const lat = Number(x.latitude);
+        const lng = Number(x.longitude);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) points.push([lat, lng]);
+      };
+      push(m?.pickup);
+      push(m?.current);
+      push(m?.delivery);
+      if (points.length >= 2) {
+        lines.push({ parcelId: p.id, trackingNumber: p.trackingNumber, status: p.status, points });
+      }
+    }
+    return lines;
+  }, [markerByParcel, parcels]);
+
+  const bounds = useMemo(() => {
+    const pts: LatLngTuple[] = [];
+    for (const m of markers) {
+      const lat = Number(m.latitude);
+      const lng = Number(m.longitude);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) pts.push([lat, lng]);
+    }
+    if (!pts.length) return undefined;
+    return pts as any;
+  }, [markers]);
+
+  const center = useMemo<LatLngTuple>(() => {
+    const current = markers.find((m) => m.type === "current");
+    const fallback = markers[0];
+    const chosen = current ?? fallback;
+    const lat = chosen ? Number(chosen.latitude) : 23.8103;
+    const lng = chosen ? Number(chosen.longitude) : 90.4125;
+    if (Number.isFinite(lat) && Number.isFinite(lng)) return [lat, lng];
+    return [23.8103, 90.4125];
+  }, [markers]);
+
+  const colorForStatus = (status: ParcelStatus) => {
+    if (status === "BOOKED") return "#f59e0b";
+    if (status === "PICKED_UP") return "#06b6d4";
+    if (status === "IN_TRANSIT") return "#3b82f6";
+    if (status === "DELIVERED") return "#10b981";
+    return "#ef4444";
+  };
 
   return (
     <div className="min-h-screen">
       <main className="w-full space-y-6 px-4 lg:px-10 lg:py-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <PageTitle>{title}</PageTitle>
-            <p className="text-sm text-muted-foreground">{subtitle}</p>
+            <PageTitle>Active route</PageTitle>
+            <p className="text-sm text-muted-foreground">Pickup, delivery, and current locations for assigned parcels.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => setCenter(resolvedStart)} className="gap-2">
-              <RefreshCw size={16} /> Reset center
+            <Button variant="secondary" onClick={load} className="gap-2" disabled={loading || role !== "AGENT"}>
+              <RefreshCw size={16} /> Refresh
             </Button>
-            <Button variant="secondary" onClick={() => setRoute([...route].reverse())} className="gap-2">
-              <Shuffle size={16} /> Reverse route
-            </Button>
-            {role === "agent" && (
-              <Button onClick={saveAgentRoute} className="gap-2">
-                <Save size={16} /> Save route
-              </Button>
-            )}
           </div>
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-[1.2fr,0.9fr]">
-          <MotionCard className="p-0">
+        {role !== "AGENT" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Not available</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">This map is available for agents only.</CardContent>
+          </Card>
+        )}
+
+        {role === "AGENT" && (
+          <div className="grid gap-5 lg:grid-cols-[1.2fr,0.9fr]">
+          <MotionCard className="px-2 pb-2">
             <div className="space-y-4 p-4 pb-2">
               <div className="flex items-center justify-between">
                 <SectionTitle className="text-foreground">Route monitor</SectionTitle>
-                <span className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-primary">
-                  Optimized via Google Maps
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                <span className="flex items-center gap-2 rounded-full bg-secondary px-3 py-1">
-                  <MapPin size={14} className="text-primary" /> {center[0].toFixed(4)}, {center[1].toFixed(4)}
-                </span>
-                <span className="flex items-center gap-2 rounded-full bg-secondary px-3 py-1">
-                  <MapPin size={14} className="text-cyan-600" /> {route.length} waypoints
-                </span>
-                {role === "agent" && "startOptions" in routePlan && (
-                  <select
-                    value={startId}
-                    onChange={(e) => setStartId(e.target.value)}
-                    className="rounded-xl border border-[hsl(var(--border))] bg-white px-3 py-2 text-sm text-foreground shadow-sm"
-                  >
-                    {routePlan.startOptions.map((opt) => (
-                      <option key={opt.id} value={opt.id}>
-                        Start: {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                )}
+                <span className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-primary">Live</span>
               </div>
             </div>
             <div className="h-[560px] w-full overflow-hidden rounded-[28px] border border-[hsl(var(--border))]">
-              <MapContainer center={center} zoom={12} className="h-full w-full">
+              <MapContainer center={center} bounds={bounds} zoom={12} className="h-full w-full">
                 <TileLayer
                   attribution='&copy; OpenStreetMap contributors'
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
-                <Marker position={center} icon={markerIcon}>
-                  <Popup>Start point</Popup>
-                </Marker>
-                <Polyline positions={route} color="#22c55e" weight={5} />
-                {route.map((pt, i) => (
-                  <Marker key={`${pt[0]}-${pt[1]}-${i}`} position={pt} icon={markerIcon}>
-                    <Popup>{i === 0 ? "Start" : `Stop ${i}`}</Popup>
+                {polylines.map((line) => (
+                  <Polyline key={line.parcelId} positions={line.points} pathOptions={{ color: colorForStatus(line.status), weight: 5 }} />
+                ))}
+                {markers.map((m) => (
+                  <Marker key={`${m.type}:${m.parcelId}:${m.latitude}:${m.longitude}`} position={[m.latitude, m.longitude]} icon={markerIcon}>
+                    <Popup>
+                      <div className="space-y-1">
+                        <div className="font-semibold">{m.trackingNumber}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {m.type.toUpperCase()} · {m.status}
+                        </div>
+                      </div>
+                    </Popup>
                   </Marker>
                 ))}
               </MapContainer>
@@ -157,68 +185,55 @@ export default function TrackMap() {
               <CardTitle>Route details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
+              {loading && <div className="rounded-2xl border border-[hsl(var(--border))] bg-secondary px-4 py-3 text-sm text-muted-foreground">Loading…</div>}
+              {error && !loading && <div className="rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
+              {!loading && !error && summary && (
+                <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-2xl border border-[hsl(var(--border))] bg-white p-3 shadow-sm">
-                  <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Start</p>
-                  <p className="text-lg font-semibold text-foreground">{center[0].toFixed(4)}</p>
-                  <p className="text-sm text-muted-foreground">{center[1].toFixed(4)}</p>
+                  <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Assigned</p>
+                  <p className="text-lg font-semibold text-foreground">{summary.count}</p>
+                  <p className="text-sm text-muted-foreground">Active parcels</p>
                 </div>
                 <div className="rounded-2xl border border-[hsl(var(--border))] bg-white p-3 shadow-sm">
-                  <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Route length</p>
-                  <p className="text-lg font-semibold text-foreground">{route.length} points</p>
-                  <p className="text-sm text-muted-foreground">Polyline weight: 5px</p>
+                  <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">In transit</p>
+                  <p className="text-lg font-semibold text-foreground">{summary.inTransit}</p>
+                  <p className="text-sm text-muted-foreground">Moving now</p>
                 </div>
               </div>
-              <div className="space-y-3">
-                <SectionTitle className="text-lg">Stops</SectionTitle>
-                <div className="space-y-2">
-                  {route.map((pt, idx) => (
-                    <div key={`${pt[0]}-${pt[1]}-${idx}`} className="flex items-center justify-between rounded-2xl border border-[hsl(var(--border))] bg-white px-4 py-3 shadow-sm">
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">{idx === 0 ? "Start" : `Waypoint ${idx}`}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {pt[0].toFixed(4)}, {pt[1].toFixed(4)}
-                        </p>
-                      </div>
-                      <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary-foreground">
-                        ETA {20 + idx} min
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              )}
 
-              {role === "customer" && (
-                <form className="space-y-3" onSubmit={submitCustomerLocation}>
-                  <SectionTitle className="text-lg">Share your locations</SectionTitle>
+              {!loading && !error && (
+                <div className="space-y-3">
+                  <SectionTitle className="text-lg">Parcels</SectionTitle>
                   <div className="space-y-2">
-                    <label className="text-sm text-muted-foreground" htmlFor="customer-pickup">Pickup address</label>
-                    <input
-                      id="customer-pickup"
-                      className="w-full rounded-xl border border-[hsl(var(--border))] bg-white px-3 py-2 text-sm text-foreground shadow-sm"
-                      value={customerPickup}
-                      onChange={(e) => setCustomerPickup(e.target.value)}
-                      placeholder="House 12, Dhanmondi"
-                      required
-                    />
+                    {parcels.map((p) => (
+                      <div
+                        key={p.id}
+                        className="flex flex-col gap-2 rounded-2xl border border-[hsl(var(--border))] bg-white px-4 py-3 shadow-sm"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-foreground">{p.trackingNumber}</p>
+                            <p className="truncate text-xs text-muted-foreground">{p.pickupAddress} → {p.deliveryAddress}</p>
+                          </div>
+                          <span className="rounded-full bg-secondary px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                            {p.status}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                    {!parcels.length && (
+                      <div className="rounded-2xl border border-[hsl(var(--border))] bg-secondary px-4 py-3 text-sm text-muted-foreground">
+                        No active parcels.
+                      </div>
+                    )}
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm text-muted-foreground" htmlFor="customer-delivery">Delivery address</label>
-                    <input
-                      id="customer-delivery"
-                      className="w-full rounded-xl border border-[hsl(var(--border))] bg-white px-3 py-2 text-sm text-foreground shadow-sm"
-                      value={customerDelivery}
-                      onChange={(e) => setCustomerDelivery(e.target.value)}
-                      placeholder="Road 18, Banani"
-                      required
-                    />
-                  </div>
-                  <Button type="submit" className="w-full">Share location</Button>
-                </form>
+                </div>
               )}
             </CardContent>
           </Card>
         </div>
+        )}
       </main>
     </div>
   );

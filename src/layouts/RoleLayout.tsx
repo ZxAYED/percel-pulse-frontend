@@ -12,7 +12,7 @@ export default function RoleLayout() {
           <Sidebar />
         </div>
         <main className="flex-1">
-          <div className="rounded-3xl border border-[hsl(var(--border))] bg-white p-6 shadow-[0_18px_60px_-44px_rgba(15,23,42,0.35)]">
+          <div className="rounded-3xl border border-[hsl(var(--border))] bg-white p-4 sm:p-5 lg:p-6 shadow-[0_18px_60px_-44px_rgba(15,23,42,0.35)]">
             <Outlet />
           </div>
         </main>
